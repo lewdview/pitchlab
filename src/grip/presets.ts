@@ -63,8 +63,8 @@ export const PRESETS: Preset[] = [
   },
   {
     id: 'curveball', name: 'Curveball', family: 'curveball', seamAxis: 'z',
-    blurb: 'Middle finger along a seam over the top-front of the ball; the hand turns inward and pulls down for topspin.',
-    fingers: { thumb: F(150, -50, 0.35), index: F(118, 48, 0.35), middle: F(142, 40, 0.65), ring: F(150, -5, 0.12), little: F(160, -25, 0.05, 0, 'pad', false) },
+    blurb: 'Hand on the arm side of the ball with the palm facing in; middle finger along a seam over the top, thumb underneath. The fingers pull down over the front for topspin.',
+    fingers: { thumb: F(100, -58, 0.35), index: F(78, 62, 0.35), middle: F(112, 52, 0.65), ring: F(150, 18, 0.12), little: F(165, 0, 0.05, 0, 'pad', false) },
     release: { speedFactor: 0.84, spinRpm: 2550, tiltDeg: -150, gyroDeg: 30 },
   },
   {

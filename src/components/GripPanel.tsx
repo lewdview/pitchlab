@@ -85,11 +85,18 @@ function FingerControls() {
           {(Object.keys(CONTACT_LABELS) as ContactType[]).map((c) => <option key={c} value={c}>{CONTACT_LABELS[c]}</option>)}
         </select>
       </div>
+      <HandSizeField />
       {grip.fingers.index.enabled && grip.fingers.middle.enabled && (
         <NumField label="Index–middle spacing" value={spread} min={4} max={90} step={0.5} unit="°" onChange={setSpread} hint="Moves both fingers symmetrically about their midpoint." />
       )}
     </div>
   );
+}
+
+function HandSizeField() {
+  const size = useStore((s) => s.handSize);
+  const set = useStore((s) => s.set);
+  return <NumField label="Hand size (display only)" value={size * 100} min={80} max={120} step={1} digits={0} unit="%" onChange={(v) => set({ handSize: v / 100 })} hint="100% ≈ adult hand (middle finger ~3.2 in). Changes only the drawn hand, not the estimate." />;
 }
 
 function SeamControls() {

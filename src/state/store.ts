@@ -82,7 +82,8 @@ export interface AppState {
   pinned: PinnedPitch[];
   overlay: Overlay | null;
   gripTool: GripTool;
-  showHand: boolean;
+  handStyle: 'off' | 'ghost' | 'solid';
+  handSize: number;
   selectedFinger: FingerId;
   mobileTab: 'grip' | 'flight' | 'compare';
   aimTarget: { x: number; y: number };
@@ -155,7 +156,8 @@ export const useStore = create<AppState>((set, get) => ({
   pinned: [],
   overlay: null,
   gripTool: 'orbit',
-  showHand: true,
+  handStyle: 'ghost',
+  handSize: 1,
   selectedFinger: 'index',
   mobileTab: 'grip',
   aimTarget: DEFAULT_TARGET,

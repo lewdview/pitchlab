@@ -13,18 +13,19 @@ import type { Hand } from '../physics/simulate';
 import { HandViz } from './HandViz';
 
 
-type ViewPreset = 'back' | 'front' | 'arm' | 'glove' | 'top' | 'bottom';
-const VIEW_LABEL: Record<ViewPreset, string> = { back: "Pitcher's view (back)", front: 'Front (toward plate)', arm: 'Arm side', glove: 'Glove side', top: 'Top', bottom: 'Underside' };
+type ViewPreset = 'photo' | 'back' | 'front' | 'arm' | 'glove' | 'top' | 'bottom';
+const VIEW_LABEL: Record<ViewPreset, string> = { photo: 'Grip photo (¾ view)', back: "Pitcher's view (back)", front: 'Front (toward plate)', arm: 'Arm side', glove: 'Glove side', top: 'Top', bottom: 'Underside' };
 
 function viewPosition(v: ViewPreset, hand: Hand): [number, number, number] {
   const s = hand === 'R' ? 1 : -1;
   switch (v) {
-    case 'back': return [0.5 * s, 1.4, 4.6];
-    case 'front': return [0, 0.9, -4.8];
-    case 'arm': return [4.8 * s, 0.7, 0.5];
-    case 'glove': return [-4.8 * s, 0.7, 0.5];
-    case 'top': return [0, 4.9, 0.8];
-    case 'bottom': return [0, -4.9, 0.8];
+    case 'photo': return [-5.6 * s, 2.4, 4.2];
+    case 'back': return [0.6 * s, 1.8, 7.4];
+    case 'front': return [0, 1.2, -7.4];
+    case 'arm': return [7.4 * s, 1.0, 0.8];
+    case 'glove': return [-7.4 * s, 1.0, 0.8];
+    case 'top': return [0, 7.4, 1.2];
+    case 'bottom': return [0, -7.4, 1.2];
   }
 }
 
@@ -140,7 +141,8 @@ function GripScene({ preset, nonce }: { preset: ViewPreset; nonce: number }) {
   const grip = useStore((s) => s.grip);
   const hand = useStore((s) => s.hand);
   const tool = useStore((s) => s.gripTool);
-  const showHand = useStore((s) => s.showHand);
+  const handStyle = useStore((s) => s.handStyle);
+  const handSize = useStore((s) => s.handSize);
   const selected = useStore((s) => s.selectedFinger);
   const { spec } = useDerived();
   const [dragging, setDragging] = useState(false);
@@ -151,7 +153,7 @@ function GripScene({ preset, nonce }: { preset: ViewPreset; nonce: number }) {
       <ambientLight intensity={0.55} />
       <directionalLight position={[2, 4, 3]} intensity={1.6} />
       <directionalLight position={[-3, -1, -2]} intensity={0.5} color="#9fb8ff" />
-      <OrbitControls makeDefault enabled={tool === 'orbit' && !dragging} enablePan={false} minDistance={2.6} maxDistance={9} />
+      <OrbitControls makeDefault enabled={tool === 'orbit' && !dragging} enablePan={false} minDistance={2.6} maxDistance={14} />
       <CameraRig preset={preset} hand={hand} nonce={nonce} />
       <BallRotator hand={hand}>
         <group quaternion={new THREE.Quaternion(q[1], q[2], q[3], q[0])}>
@@ -161,7 +163,7 @@ function GripScene({ preset, nonce }: { preset: ViewPreset; nonce: number }) {
       {FINGERS.map((id) => (
         <FingerMarker key={id} id={id} f={grip.fingers[id]} hand={hand} selected={selected === id} onDragState={setDragging} />
       ))}
-      {showHand && <HandViz fingers={grip.fingers} hand={hand} />}
+      <HandViz fingers={grip.fingers} hand={hand} size={handSize} style={handStyle} />
       {axis && (
         <>
           <Arrow dir={axis as [number, number, number]} length={1.75} color="#ffd34d" radius={0.025} />
@@ -178,13 +180,13 @@ function GripScene({ preset, nonce }: { preset: ViewPreset; nonce: number }) {
 export function GripEditor() {
   const hand = useStore((s) => s.hand);
   const tool = useStore((s) => s.gripTool);
-  const showHand = useStore((s) => s.showHand);
+  const handStyle = useStore((s) => s.handStyle);
   const set = useStore((s) => s.set);
   const setHand = useStore((s) => s.setHand);
   const selected = useStore((s) => s.selectedFinger);
   const setFinger = useStore((s) => s.setFinger);
   const grip = useStore((s) => s.grip);
-  const [preset, setPreset] = useState<ViewPreset>('back');
+  const [preset, setPreset] = useState<ViewPreset>('photo');
   const [nonce, setNonce] = useState(0);
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -213,7 +215,11 @@ export function GripEditor() {
             <button key={h} role="radio" aria-checked={hand === h} className={hand === h ? 'on' : ''} onClick={() => setHand(h)}>{h === 'R' ? 'RHP' : 'LHP'}</button>
           ))}
         </div>
-        <label className="chk"><input type="checkbox" checked={showHand} onChange={(e) => set({ showHand: e.target.checked })} /> Show hand</label>
+        <div className="seg" role="radiogroup" aria-label="Hand display">
+          {([['off', 'No hand'], ['ghost', 'Ghost hand'], ['solid', 'Solid hand']] as const).map(([k, l]) => (
+            <button key={k} role="radio" aria-checked={handStyle === k} className={handStyle === k ? 'on' : ''} onClick={() => set({ handStyle: k })}>{l}</button>
+          ))}
+        </div>
       </div>
       <div className="ge-hint">
         {tool === 'orbit' && <>Drag a <b>finger marker</b> to move it · drag empty space to orbit the <b>camera</b> (does not change the grip)</>}
@@ -221,7 +227,7 @@ export function GripEditor() {
         {tool === 'grip' && <>Drag the ball to rotate the <b>whole grip</b> in the hand · fingers stay on the same leather</>}
       </div>
       </div>
-      <Canvas camera={{ position: [0.5, 1.4, 4.6], fov: 34 }} dpr={[1, 2]}>
+      <Canvas camera={{ position: [-5.6, 2.4, 4.2], fov: 34 }} dpr={[1, 2]}>
         <GripScene preset={preset} nonce={nonce} />
       </Canvas>
       <div className="ge-views">

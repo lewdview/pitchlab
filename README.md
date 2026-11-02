@@ -17,6 +17,7 @@ npm run build      # typecheck + production build into dist/
 | **Grip estimation** | `src/grip/estimate.ts`, `presets.ts`, `knuckle.ts` | Grip + delivery → estimated release speed, spin rate, spin axis, initial orientation. Documented heuristics only. |
 | **Flight physics** | `src/physics/simulate.ts`, `aero.ts`, `seamModel.ts`, `pitch.ts` | Release conditions → trajectory. Has no knowledge of grips, UI or cameras. |
 | State | `src/state/store.ts`, `derived.tsx` | `computeDerived()` is a pure function: grip/delivery → spec → physics. View state is never an input. |
+| Hand display | `src/grip/handModel.ts` | Anatomical hand pose reaching the contacts (display only). |
 | UI | `src/components/*` | Grip editor, flight view, ball close-up, controls, compare and knuckle lab. |
 
 All quantities are SI internally (m, s, kg, rad/s). Display units are converted at the edge (`src/util/units.ts`).
