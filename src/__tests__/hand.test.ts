@@ -17,7 +17,8 @@ describe('hand visualisation pose', () => {
           const contact = p.fingers[f.id].contact;
           // the touching point (fingertip, or DIP knuckle for bent-finger contact) sits on the contact
           const touching = contact === 'knuckle' ? f.joints[2] : f.joints[3];
-          const surfacePoint = sub(touching, c.map((x) => x * (1 + FINGER_RADIUS[f.id]))) as [number, number, number];
+          const k = 1 + FINGER_RADIUS[f.id];
+          const surfacePoint = sub(touching, [c[0] * k, c[1] * k, c[2] * k]);
           expect(len(surfacePoint)).toBeLessThan(0.06);
         }
         // the palm stays outside the ball
