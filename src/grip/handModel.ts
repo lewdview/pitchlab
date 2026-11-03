@@ -119,7 +119,8 @@ function distalOnSurface(T: Vec3, M: Vec3, Ld: number, rho: number): Vec3 {
   axis = len(axis) < 1e-6 ? anyPerp(Th) : norm(axis);
   // never wrap past the knuckle's direction (short thumbs/close knuckles)
   const maxA = 0.75 * angle(Th, M);
-  return scale(rotate(Th, axis, Math.min(Ld / rho, maxA)), rho);
+  // the pad touches at the tip; the DIP sits slightly off the leather so the finger reads as curled
+  return scale(rotate(Th, axis, Math.min(Ld / rho, maxA)), rho * 1.05);
 }
 
 /** Push any joint that ended up inside the ball (plus finger thickness) back out to the surface. */
@@ -159,7 +160,8 @@ function basePoints(f: Frame, D: number, s: number) {
     const [o, drop] = MCP_OFFSET[id];
     mcp[id] = add(add(add(K, scale(f.u, -drop * s)), scale(f.w, o * halfW)), scale(f.n, 0.05 * s));
   }
-  mcp.thumb = add(add(add(P, scale(f.u, -0.32 * halfL)), scale(f.w, -1.0 * halfW)), scale(f.n, 0.32 * s));
+  // thumb CMC: at the heel of the palm on the index side, set forward toward the ball (thenar)
+  mcp.thumb = add(add(add(P, scale(f.u, -0.45 * halfL)), scale(f.w, -0.62 * halfW)), scale(f.n, 0.42 * s));
   return { P, mcp };
 }
 
@@ -196,7 +198,7 @@ function fingerPose(id: FingerId, f: FingerContact, M: Vec3, c: Vec3, frame: Fra
     if (f.contact === 'pad' || id === 'thumb') {
       // finger pad on the ball; middle phalanx rises off the surface toward the knuckle (flexed PIP)
       const dip = distalOnSurface(T, M, Ld, rho);
-      joints = [M, middleBack(dip, M, id === 'thumb' ? 0.3 : 0.5, Lm, r), dip, T];
+      joints = [M, middleBack(dip, M, id === 'thumb' ? 0.35 : 0.78, Lm, r), dip, T];
     } else if (f.contact === 'knuckle') {
       // bent finger: the DIP knuckle presses the ball, the distal phalanx folds back toward the palm
       const dip = scale(c, 1 + r * 0.95);
