@@ -164,6 +164,8 @@ function ViewControls() {
       <NumField label="Movement exaggeration" value={v.exaggerate} min={1} max={6} step={1} digits={0} unit="×" onChange={(x) => setView({ exaggerate: Math.round(x) })} hint="1× = true scale. Larger values scale deviation from the no-lift path for display only." />
       <label className="chk"><input type="checkbox" checked={v.showRef} onChange={(e) => setView({ showRef: e.target.checked })} /> Show no-lift reference (dashed)</label>
       <label className="chk"><input type="checkbox" checked={v.showForces} onChange={(e) => setView({ showForces: e.target.checked })} /> Force arrows in slow motion</label>
+      <label className="chk"><input type="checkbox" checked={v.motionBlur} onChange={(e) => setView({ motionBlur: e.target.checked })} /> Motion blur on the spinning ball</label>
+      <p className="fine">Display only: seams smear over the angle the ball turns during a 180° shutter at the current playback speed. Real-time fastballs blur heavily; slow motion and knuckleballs stay sharp.</p>
       <label className="chk"><input type="checkbox" checked={v.enlargeBall} onChange={(e) => setView({ enlargeBall: e.target.checked })} /> Draw ball 3× size for visibility</label>
       <NumField label="Strike zone top" value={v.zoneTop / IN} min={30} max={50} step={0.5} unit="in" onChange={(x) => setView({ zoneTop: x * IN })} />
       <NumField label="Strike zone bottom" value={v.zoneBottom / IN} min={12} max={28} step={0.5} unit="in" onChange={(x) => setView({ zoneBottom: x * IN })} />

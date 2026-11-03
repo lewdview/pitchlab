@@ -56,6 +56,8 @@ export interface ViewSettings {
   enlargeBall: boolean;
   showRef: boolean;
   showForces: boolean;
+  /** Display-only rotational motion blur on the spinning ball (180° virtual shutter). */
+  motionBlur: boolean;
   zoneTop: number;
   zoneBottom: number;
   units: Units;
@@ -149,7 +151,7 @@ export const useStore = create<AppState>((set, get) => ({
   overridePresetId: null,
   delivery: initialDelivery,
   ...baseState,
-  view: { camera: 'catcher', exaggerate: 1, enlargeBall: true, showRef: true, showForces: true, zoneTop: 1.07, zoneBottom: 0.46, units: 'imperial' },
+  view: { camera: 'catcher', exaggerate: 1, enlargeBall: true, showRef: true, showForces: true, motionBlur: true, zoneTop: 1.07, zoneBottom: 0.46, units: 'imperial' },
   t: 0,
   playing: true,
   rate: 0.25,

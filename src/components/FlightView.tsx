@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import * as THREE from 'three';
 import { useStore, type CameraView } from '../state/store';
 import { useDerived } from '../state/derived';
-import { Baseball, Arrow } from './Baseball';
+import { Baseball, Arrow, spinBlur } from './Baseball';
 import { exaggerate, pathPoints } from './paths';
 import { orientationAt, stateAt, flightEnd, armSideX, type Trajectory } from '../physics/simulate';
 import type { PitchResult } from '../physics/pitch';
@@ -92,6 +92,7 @@ function MovingBall({ res, k, ballScale }: { res: PitchResult; k: number; ballSc
   const showForces = useStore((s) => s.view.showForces);
   const rate = useStore((s) => s.rate);
   const playing = useStore((s) => s.playing);
+  const motionBlur = useStore((s) => s.view.motionBlur);
   const traj = res.traj;
   const tc = Math.min(t, flightEnd(traj));
   const st = stateAt(traj, tc);
@@ -114,7 +115,7 @@ function MovingBall({ res, k, ballScale }: { res: PitchResult; k: number; ballSc
   return (
     <group position={p}>
       <group quaternion={new THREE.Quaternion(q[1], q[2], q[3], q[0])}>
-        <Baseball radius={r} detail={0.6} />
+        <Baseball radius={r} detail={0.6} blur={spinBlur(traj.init.omega, q, rate, motionBlur)} />
       </group>
       {axis && <Arrow dir={axis} length={r * 3} color="#ffd34d" radius={r * 0.12} origin={[-axis[0] * r * 1.5, -axis[1] * r * 1.5, -axis[2] * r * 1.5]} />}
       {forces.map(([c, d, m]) => (m > 1e-4 ? <Arrow key={c} dir={d} length={m * kF} color={c} radius={0.006} /> : null))}

@@ -2,7 +2,7 @@ import { Canvas } from '@react-three/fiber';
 import { useState } from 'react';
 import * as THREE from 'three';
 import { useStore } from '../state/store';
-import { Baseball, Arrow } from './Baseball';
+import { Baseball, Arrow, spinBlur } from './Baseball';
 import { orientationAt, stateAt, flightEnd } from '../physics/simulate';
 import type { PitchResult } from '../physics/pitch';
 import type { Vec3 } from '../physics/vec';
@@ -15,6 +15,8 @@ type CloseView = 'behind' | 'side';
 export function BallCloseup({ res, knuckle }: { res: PitchResult; knuckle: boolean }) {
   const t = useStore((s) => s.t);
   const showForces = useStore((s) => s.view.showForces);
+  const motionBlur = useStore((s) => s.view.motionBlur);
+  const rate = useStore((s) => s.rate);
   const [cv, setCv] = useState<CloseView>('behind');
   const [open, setOpen] = useState(() => typeof window === 'undefined' || !window.matchMedia('(max-width: 900px)').matches);
   const traj = res.traj;
@@ -60,7 +62,7 @@ export function BallCloseup({ res, knuckle }: { res: PitchResult; knuckle: boole
           <ambientLight intensity={0.65} />
           <directionalLight position={[2, 3, 4]} intensity={1.5} />
           <group quaternion={frameQ}>
-            <group quaternion={ballQ}><Baseball radius={1} detail={0.7} /></group>
+            <group quaternion={ballQ}><Baseball radius={1} detail={0.7} blur={spinBlur(traj.init.omega, q, rate, motionBlur)} /></group>
             {axis && <Arrow dir={axis} length={3} color="#ffd34d" radius={0.03} origin={scale(axis, -1.5) as [number, number, number]} />}
             {arrow(smp.fMagnus, '#34d7ff', 'm')}
             {arrow(smp.fSeam, '#ff5fd2', 's')}
