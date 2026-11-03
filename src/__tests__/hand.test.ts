@@ -43,3 +43,21 @@ describe('hand visualisation pose', () => {
     expect(len(sub(b.fingers[2].joints[3], a.fingers[2].joints[3]))).toBeLessThan(0.15);
   });
 });
+
+import { buildSkinField, skinDistanceAt } from '../grip/handSkin';
+describe('continuous hand skin', () => {
+  it('encloses every finger bone and the palm, and stays off the ball centre', () => {
+    for (const p of PRESETS) {
+      const pose = buildHandPose(p.fingers, 'R', 1);
+      const sf = buildSkinField(pose, 96);
+      expect(skinDistanceAt(sf, pose.palmCenter)).toBeLessThan(0);
+      for (const f of pose.fingers) {
+        for (let i = 0; i < 3; i++) {
+          const mid: [number, number, number] = [0, 1, 2].map((k) => (f.joints[i][k] + f.joints[i + 1][k]) / 2) as [number, number, number];
+          expect(skinDistanceAt(sf, mid)).toBeLessThan(0);
+        }
+      }
+      expect(skinDistanceAt(sf, [0, 0, 0])).toBeGreaterThan(0);
+    }
+  });
+});

@@ -1,0 +1,169 @@
+// One continuous skin surface for the hand (display only).
+//
+// The hand pose (handModel.ts) is turned into a signed-distance field: every finger bone is a tapered "round cone",
+// the palm, fleshy heels and thumb base are ellipsoids, and the knuckle ridge and wrist are round cones. Parts are
+// blended with a smooth minimum so they flow into each other like skin:
+//   palm parts with each other   k = 0.25 (very soft)
+//   bones within one finger      k = 0.05 (smooth knuckles)
+//   each finger into the palm    k = 0.14 (webbing at the base of the finger only)
+//   fingers with each other      plain min (no webbing between neighbouring fingers)
+// The field is sampled on a voxel grid (only near each part, for speed) and polygonised with marching cubes.
+
+import type { Vec3 } from '../physics/vec';
+import { add, sub, scale, dot } from '../physics/vec';
+import { PALM, type HandPose } from './handModel';
+
+export interface SkinField {
+  /** Field values for MarchingCubes: positive inside, isolation 0. Length size^3, index x + y*size + z*size^2. */
+  field: Float32Array;
+  size: number;
+  center: Vec3;
+  /** Half the side of the cubic grid in world units. */
+  half: number;
+}
+
+type Prim = { lo: Vec3; hi: Vec3; d: (x: number, y: number, z: number) => number };
+
+const smin = (a: number, b: number, k: number) => {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+};
+
+/** Exact SDF of a round cone (capsule with different end radii), after Inigo Quilez. */
+function roundCone(a: Vec3, b: Vec3, r1: number, r2: number): Prim {
+  const ba = sub(b, a);
+  const l2 = dot(ba, ba);
+  const rr = r1 - r2;
+  const a2 = l2 - rr * rr;
+  const il2 = 1 / Math.max(l2, 1e-12);
+  const m = Math.max(r1, r2);
+  return {
+    lo: [Math.min(a[0], b[0]) - m, Math.min(a[1], b[1]) - m, Math.min(a[2], b[2]) - m],
+    hi: [Math.max(a[0], b[0]) + m, Math.max(a[1], b[1]) + m, Math.max(a[2], b[2]) + m],
+    d: (x, y, z) => {
+      const pax = x - a[0], pay = y - a[1], paz = z - a[2];
+      const yy = pax * ba[0] + pay * ba[1] + paz * ba[2];
+      const zz = yy - l2;
+      const xvx = pax * l2 - ba[0] * yy, xvy = pay * l2 - ba[1] * yy, xvz = paz * l2 - ba[2] * yy;
+      const x2 = xvx * xvx + xvy * xvy + xvz * xvz;
+      const y2 = yy * yy * l2, z2 = zz * zz * l2;
+      const k = Math.sign(rr) * rr * rr * x2;
+      if (Math.sign(zz) * a2 * z2 > k) return Math.sqrt(x2 + z2) * il2 - r2;
+      if (Math.sign(yy) * a2 * y2 < k) return Math.sqrt(x2 + y2) * il2 - r1;
+      return (Math.sqrt(Math.max(0, x2 * a2 * il2)) + yy * rr) * il2 - r1;
+    },
+  };
+}
+
+/** Approximate SDF of an ellipsoid with semi-axes r along the orthonormal axes ex, ey, ez. */
+function ellipsoid(c: Vec3, ex: Vec3, ey: Vec3, ez: Vec3, r: Vec3): Prim {
+  const m = Math.max(r[0], r[1], r[2]);
+  return {
+    lo: [c[0] - m, c[1] - m, c[2] - m],
+    hi: [c[0] + m, c[1] + m, c[2] + m],
+    d: (x, y, z) => {
+      const px = x - c[0], py = y - c[1], pz = z - c[2];
+      const lx = (px * ex[0] + py * ex[1] + pz * ex[2]) / r[0];
+      const ly = (px * ey[0] + py * ey[1] + pz * ey[2]) / r[1];
+      const lz = (px * ez[0] + py * ez[1] + pz * ez[2]) / r[2];
+      const k0 = Math.sqrt(lx * lx + ly * ly + lz * lz);
+      const k1 = Math.sqrt((lx / r[0]) ** 2 + (ly / r[1]) ** 2 + (lz / r[2]) ** 2);
+      return k1 < 1e-9 ? -Math.min(r[0], r[1], r[2]) : (k0 * (k0 - 1)) / k1;
+    },
+  };
+}
+
+/** Radii along a finger from knuckle to tip. */
+export function fingerRadii(radius: number, thumb: boolean): number[] {
+  const r = radius * (thumb ? 1.08 : 1);
+  return thumb ? [r * 1.2, r * 1.02, r * 0.95, r * 0.86] : [r * 1.04, r * 0.95, r * 0.87, r * 0.8];
+}
+
+const BIG = 10;
+const CLAMP = 0.3;
+const MARGIN = 0.32;
+let bufA: Float32Array | null = null;
+let bufB: Float32Array | null = null;
+
+export function buildSkinField(pose: HandPose, size: number, out?: Float32Array): SkinField {
+  const s = pose.size;
+  const { u, w, n } = pose;
+  const halfW = (PALM.width * s) / 2, halfL = (PALM.length * s) / 2, halfT = (PALM.thickness * s) / 2;
+  const P = pose.palmCenter;
+
+  const palmParts: Prim[] = [
+    ellipsoid(add(P, scale(u, 0.05 * halfL)), w, u, n, [halfW * 0.96, halfL * 1.02, halfT * 0.92]),
+    ellipsoid(add(add(add(P, scale(w, halfW * 0.5)), scale(u, -halfL * 0.42)), scale(n, halfT * 0.25)), w, u, n, [halfW * 0.46, halfL * 0.56, halfT * 1.05]),
+    ellipsoid(pose.thenar.center, w, u, n, [pose.thenar.radius, pose.thenar.radius * 1.4, pose.thenar.radius * 0.85]),
+  ];
+  const mcp = pose.fingers.slice(1);
+  for (let i = 0; i < mcp.length - 1; i++) {
+    palmParts.push(roundCone(mcp[i].joints[0], mcp[i + 1].joints[0], mcp[i].radius * 1.1, mcp[i + 1].radius * 1.1));
+  }
+  const forearmCut = add(pose.wrist, scale(sub(pose.forearmEnd, pose.wrist), 0.32));
+  palmParts.push(roundCone(add(pose.wrist, scale(u, 0.35 * s)), forearmCut, 0.62 * s, 0.7 * s));
+
+  const fingerParts: Prim[][] = pose.fingers.map((f) => {
+    const rad = fingerRadii(f.radius, f.id === 'thumb');
+    return [0, 1, 2].map((i) => roundCone(f.joints[i], f.joints[i + 1], rad[i], rad[i + 1]));
+  });
+
+  // cubic grid around everything
+  const lo: Vec3 = [Infinity, Infinity, Infinity], hi: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (const p of [...palmParts, ...fingerParts.flat()]) {
+    for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], p.lo[k]); hi[k] = Math.max(hi[k], p.hi[k]); }
+  }
+  const center: Vec3 = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
+  const half = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2 + MARGIN + 0.05;
+  const hs = size / 2;
+  const toWorld = (i: number, k: number) => center[k] + (half * (i - hs)) / hs;
+  const toIndex = (v: number, k: number) => ((v - center[k]) / half) * hs + hs;
+  const size2 = size * size, size3 = size2 * size;
+  if (!bufA || bufA.length !== size3) { bufA = new Float32Array(size3); bufB = new Float32Array(size3); }
+  const palm = bufA, total = bufB!;
+  palm.fill(BIG);
+  total.fill(BIG);
+
+  const range = (p: { lo: Vec3; hi: Vec3 }, k: number): [number, number] => [
+    Math.max(1, Math.floor(toIndex(p.lo[k] - MARGIN, k))),
+    Math.min(size - 2, Math.ceil(toIndex(p.hi[k] + MARGIN, k))),
+  ];
+  const visit = (p: { lo: Vec3; hi: Vec3 }, fn: (idx: number, x: number, y: number, z: number) => void) => {
+    const [x0, x1] = range(p, 0), [y0, y1] = range(p, 1), [z0, z1] = range(p, 2);
+    for (let z = z0; z <= z1; z++) {
+      const wz = toWorld(z, 2);
+      for (let y = y0; y <= y1; y++) {
+        const wy = toWorld(y, 1);
+        const row = z * size2 + y * size;
+        for (let x = x0; x <= x1; x++) fn(row + x, toWorld(x, 0), wy, wz);
+      }
+    }
+  };
+
+  for (const pr of palmParts) visit(pr, (i, x, y, z) => { palm[i] = smin(palm[i], pr.d(x, y, z), 0.25); });
+  for (const parts of fingerParts) {
+    const box = { lo: [...parts[0].lo] as Vec3, hi: [...parts[0].hi] as Vec3 };
+    for (const pr of parts) for (let k = 0; k < 3; k++) { box.lo[k] = Math.min(box.lo[k], pr.lo[k]); box.hi[k] = Math.max(box.hi[k], pr.hi[k]); }
+    visit(box, (i, x, y, z) => {
+      let df = parts[0].d(x, y, z);
+      df = smin(df, parts[1].d(x, y, z), 0.05);
+      df = smin(df, parts[2].d(x, y, z), 0.05);
+      const comb = smin(palm[i], df, 0.14);
+      if (comb < total[i]) total[i] = comb;
+    });
+  }
+  const field = out && out.length === size3 ? out : new Float32Array(size3);
+  for (let i = 0; i < size3; i++) {
+    const d = Math.min(total[i], palm[i]);
+    field[i] = Math.max(-CLAMP, Math.min(CLAMP, -d));
+  }
+  return { field, size, center, half };
+}
+
+/** Signed distance of the hand skin at a world point (for tests; slow). */
+export function skinDistanceAt(sf: SkinField, p: Vec3): number {
+  const hs = sf.size / 2;
+  const idx = (k: number) => Math.round(((p[k] - sf.center[k]) / sf.half) * hs + hs);
+  const x = idx(0), y = idx(1), z = idx(2);
+  return -sf.field[x + y * sf.size + z * sf.size * sf.size];
+}
