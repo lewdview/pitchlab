@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DerivedProvider, useDerived } from './state/derived';
 import { useStore } from './state/store';
 import { GripEditor } from './components/GripEditor';
@@ -82,8 +82,11 @@ function Desktop() {
 function Mobile() {
   const tab = useStore((s) => s.mobileTab);
   const set = useStore((s) => s.set);
+  const main = useRef<HTMLElement>(null);
+  // each tab starts at the top (tabs share one scroll container)
+  useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [tab]);
   return (
-    <main className="mobile">
+    <main className="mobile" ref={main}>
       <nav className="tabs mob" role="tablist">
         {(['grip', 'flight', 'compare'] as const).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'on' : ''} onClick={() => set({ mobileTab: k })}>{{ grip: 'Grip', flight: 'Flight', compare: 'Compare' }[k]}</button>

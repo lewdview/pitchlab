@@ -13,6 +13,17 @@ import {
 } from '../physics/constants';
 import { len, norm } from '../physics/vec';
 import { BallCloseup } from './BallCloseup';
+import { PitcherFigure } from './PitcherFigure';
+import { fmtLong } from '../util/units';
+import { slotName } from '../body/pitcherBody';
+
+/** While the ball is still in the hand the grip ball is drawn; the flying ball takes over after release. */
+const IN_HAND_T = 0.004;
+function FigureAtRelease({ traj }: { traj: Trajectory }) {
+  const inHand = useStore((s) => s.t < IN_HAND_T);
+  const compact = useStore((s) => s.view.camera === 'release');
+  return <PitcherFigure traj={traj} showGripBall={inHand} compact={compact} />;
+}
 
 const ACTIVE_FROM = new THREE.Color('#44c2ff');
 const ACTIVE_TO = new THREE.Color('#ff4d5e');
@@ -87,7 +98,7 @@ function TrajectoryLine({ res, k, color, gradient, width = 2.5, opacity = 1, sho
   );
 }
 
-function MovingBall({ res, k, ballScale }: { res: PitchResult; k: number; ballScale: number }) {
+function MovingBall({ res, k, ballScale, hideInHand }: { res: PitchResult; k: number; ballScale: number; hideInHand: boolean }) {
   const t = useStore((s) => s.t);
   const showForces = useStore((s) => s.view.showForces);
   const rate = useStore((s) => s.rate);
@@ -102,6 +113,7 @@ function MovingBall({ res, k, ballScale }: { res: PitchResult; k: number; ballSc
   const omega = traj.init.omega;
   const axis = len(omega) > 0 ? (norm(omega) as [number, number, number]) : null;
   const smp = traj.samples[Math.min(traj.samples.length - 1, Math.round(tc / traj.dt))];
+  if (hideInHand && t < IN_HAND_T) return null;
   const showF = showForces && (!playing || rate <= 0.25);
   const kF = 0.14; // metres per newton (display only)
   const forces: [string, [number, number, number], number][] = showF
@@ -147,6 +159,16 @@ function Cameras({ view, release }: { view: CameraView; release: [number, number
     const zoom = Math.min(size.height / 21, size.width / 4.5);
     return <OrthographicCamera key="top" makeDefault position={[0, 30, 9.4]} up={[0, 0, 1]} zoom={zoom} near={0.1} far={100} onUpdate={(c) => { c.up.set(0, 0, 1); c.lookAt(0, 0, 9.4); }} />;
   }
+  if (view === 'behind') {
+    // behind the mound, slightly to the arm side: whole body, arm slot and release height in frame
+    const sx = Math.sign(release[0]) || 1;
+    return <PerspectiveCamera key="behind" makeDefault position={[sx * 0.75, 1.95, RUBBER_TO_PLATE + 2.9]} fov={50} near={0.05} far={200} onUpdate={(c) => c.lookAt(sx * 0.1, 1.3, RUBBER_TO_PLATE - 1.6)} />;
+  }
+  if (view === 'release') {
+    // close behind the throwing hand at release: grip, wrist and forearm orientation
+    const sx = Math.sign(release[0]) || 1;
+    return <PerspectiveCamera key="release" makeDefault position={[release[0] + sx * 0.55, release[1] + 0.22, release[2] + 0.75]} fov={30} near={0.02} far={200} onUpdate={(c) => c.lookAt(release[0], release[1], release[2])} />;
+  }
   if (view === 'pitcher') {
     return <PerspectiveCamera key="pitcher" makeDefault position={[release[0] * 0.4, 2.05, release[2] + 2.6]} fov={16} near={0.05} far={200} onUpdate={(c) => c.lookAt(0, 0.85, 0)} />;
   }
@@ -162,6 +184,8 @@ function Cameras({ view, release }: { view: CameraView; release: [number, number
 }
 
 export const VIEW_INFO: Record<CameraView, { title: string; left: string; right: string }> = {
+  behind: { title: 'Behind the pitcher — arm slot, release height and side', left: '◀ 1B side', right: '3B side ▶' },
+  release: { title: 'Release close-up — your grip, wrist and forearm as the ball leaves', left: '', right: '' },
   catcher: { title: "Catcher's view — looking toward the mound", left: '◀ 3B side', right: '1B side ▶' },
   pitcher: { title: "Pitcher's view — looking toward home plate", left: '◀ 1B side', right: '3B side ▶' },
   side: { title: 'Side view from the first-base side (orthographic, true scale)', left: '◀ home plate', right: 'mound ▶' },
@@ -178,18 +202,21 @@ export function FlightView() {
   const { result, estimate, family } = useDerived();
   const k = view.exaggerate;
   // The catcher camera sits right behind the plate, so enlargement there would be misleading; keep true size.
-  const ballScale = view.enlargeBall && view.camera !== 'catcher' ? 3 : 1;
+  const ballScale = view.enlargeBall && !['catcher', 'behind', 'release'].includes(view.camera) ? 3 : 1;
+  // the pitcher's-eye camera sits inside the figure's head, so hide the figure there
+  const figure = view.showPitcher && view.camera !== 'pitcher';
   const release = (result?.traj.init.p ?? [0.5, 1.8, 16.5]) as [number, number, number];
   const info = VIEW_INFO[view.camera];
-  const armOnLeft = view.camera === 'catcher' || view.camera === 'overhead' ? armSideX(hand) > 0 : view.camera === 'pitcher' ? armSideX(hand) < 0 : null;
+  const armOnLeft = view.camera === 'catcher' || view.camera === 'overhead' ? armSideX(hand) > 0 : view.camera === 'pitcher' || view.camera === 'behind' ? armSideX(hand) < 0 : null;
+  const delivery = useStore((s) => s.delivery);
 
   return (
     <div className="flight-view">
       <div className="fv-toolbar">
         <div className="seg" role="radiogroup" aria-label="Camera">
-          {(['pitcher', 'catcher', 'side', 'overhead', 'orbit'] as CameraView[]).map((c) => (
+          {(['behind', 'release', 'pitcher', 'catcher', 'side', 'overhead', 'orbit'] as CameraView[]).map((c) => (
             <button key={c} role="radio" aria-checked={view.camera === c} className={view.camera === c ? 'on' : ''} onClick={() => setView({ camera: c })}>
-              {{ pitcher: 'Pitcher', catcher: 'Catcher', side: 'Side', overhead: 'Overhead', orbit: 'Orbit' }[c]}
+              {{ behind: 'Behind', release: 'Release', pitcher: 'Pitcher eye', catcher: 'Catcher', side: 'Side', overhead: 'Overhead', orbit: 'Orbit' }[c]}
             </button>
           ))}
         </div>
@@ -210,13 +237,17 @@ export function FlightView() {
             <>
               <TrajectoryLine res={result} k={k} gradient width={3} showRef={view.showRef} />
               <ReleaseMarker traj={result.traj} />
-              <MovingBall res={result} k={k} ballScale={ballScale} />
+              <MovingBall res={result} k={k} ballScale={ballScale} hideInHand={figure} />
+              {figure && <FigureAtRelease traj={result.traj} />}
             </>
           )}
         </Canvas>
         <div className="fv-label">
           <div className="fv-title">{info.title}</div>
           {info.left && <div className="fv-sides"><span>{info.left}</span><span>{info.right}</span></div>}
+          {(view.camera === 'behind' || view.camera === 'release') && result && (
+            <div className="fv-release">Arm slot <b>{delivery.armSlotDeg.toFixed(0)}°</b> ({slotName(delivery.armSlotDeg)}) · release <b>{fmtLong(result.traj.init.p[1], view.units)}</b> high · <b>{fmtLong(delivery.releaseSide, view.units)}</b> arm side · <b>{fmtLong(delivery.extension, view.units)}</b> extension</div>
+          )}
           {armOnLeft !== null && <div className="fv-arm">{hand === 'R' ? 'RHP' : 'LHP'} arm side is on the <b>{armOnLeft ? 'left' : 'right'}</b> of this view</div>}
         </div>
         {k > 1 && <div className="exag-banner">MOVEMENT EXAGGERATED ×{k} <span>deviation from the dashed no-lift path is scaled for display; the physics is unchanged</span></div>}

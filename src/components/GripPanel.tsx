@@ -4,6 +4,8 @@ import { useDerived } from '../state/derived';
 import { PRESETS } from '../grip/presets';
 import { CONTACT_LABELS, FINGERS, FINGER_META, type ContactType, type FingerId } from '../grip/types';
 import { NumField, Section } from './ui';
+import { slotName } from '../body/pitcherBody';
+import { fmtLong } from '../util/units';
 import { classifySeamPattern } from '../physics/seamGeometry';
 import { spinAxis, worldSeamQuat } from '../physics/simulate';
 
@@ -141,11 +143,41 @@ function KnuckleGripControls() {
   );
 }
 
+function ThrowingGuide() {
+  const grip = useStore((s) => s.grip);
+  const delivery = useStore((s) => s.delivery);
+  const units = useStore((s) => s.view.units);
+  const set = useStore((s) => s.set);
+  const setView = useStore((s) => s.setView);
+  const { estimate, result } = useDerived();
+  const preset = estimate.base ?? PRESETS.find((p) => p.id === grip.presetId) ?? PRESETS[0];
+  const rel = result?.traj.init.p;
+  const go = (camera: 'behind' | 'release') => { set({ playing: false, t: 0, mobileTab: 'flight' }); setView({ camera, showPitcher: true }); };
+  return (
+    <div className="guide">
+      <div className="guide-h">{preset.name}{grip.custom ? ' (your edited grip)' : ''}</div>
+      <ol className="cues">{preset.howTo.map((c, i) => <li key={i}>{c}</li>)}</ol>
+      <div className="release-card">
+        <div><span>Arm slot</span><b>{delivery.armSlotDeg.toFixed(0)}°</b><em>{slotName(delivery.armSlotDeg)}</em></div>
+        <div><span>Release height</span><b>{rel ? fmtLong(rel[1], units) : '—'}</b><em>above plate level</em></div>
+        <div><span>Release side</span><b>{fmtLong(delivery.releaseSide, units)}</b><em>toward your arm side</em></div>
+        <div><span>Extension</span><b>{fmtLong(delivery.extension, units)}</b><em>in front of the rubber</em></div>
+      </div>
+      <div className="row wrap">
+        <button className="btn primary" onClick={() => go('behind')}>See it from behind me</button>
+        <button className="btn" onClick={() => go('release')}>Release close-up</button>
+      </div>
+      <p className="fine">Representative cues, not personal coaching. Pitchers vary grips and release, and breaking balls load the elbow, so build up gradually and work with a coach, especially for young pitchers.</p>
+    </div>
+  );
+}
+
 export function GripPanel() {
   const { family } = useDerived();
   return (
     <div className="panel grip-panel">
       <Section title="Starting grip"><PresetPicker /></Section>
+      <Section title="How to throw it"><ThrowingGuide /></Section>
       {family === 'knuckleball' && <Section title="Knuckleball grip" badge={<span className="badge k">low spin</span>}><KnuckleGripControls /></Section>}
       <Section title="Finger placement"><FingerControls /></Section>
       <Section title="Seam orientation in hand" defaultOpen={false}><SeamControls /></Section>

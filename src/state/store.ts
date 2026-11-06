@@ -12,8 +12,18 @@ import { contactVector, vectorToContact, type FingerContact, type FingerId, type
 import { gripFromPreset, newId, presetById, PRESETS } from '../grip/presets';
 import { DEFAULT_DELIVERY, estimateRelease, type Delivery } from '../grip/estimate';
 import { loadSavedGrips, persistSavedGrips } from './persistence';
+import { DEFAULT_BODY, releaseFromSlot, slotFromRelease, type BodySettings } from '../body/pitcherBody';
 
-export type CameraView = 'pitcher' | 'catcher' | 'side' | 'overhead' | 'orbit';
+/** Keep arm slot and release height/side consistent with the body when linked. */
+export function linkDelivery(prev: Delivery, patch: Partial<Delivery>, body: BodySettings, bodyChanged = false): Delivery {
+  const next = { ...prev, ...patch };
+  if (!body.link) return next;
+  if ('armSlotDeg' in patch || bodyChanged) return { ...next, ...releaseFromSlot(body.heightM, next.armSlotDeg) };
+  if ('releaseHeight' in patch || 'releaseSide' in patch) return { ...next, armSlotDeg: Math.round(slotFromRelease(body.heightM, next.releaseHeight, next.releaseSide) * 10) / 10 };
+  return next;
+}
+
+export type CameraView = 'behind' | 'release' | 'pitcher' | 'catcher' | 'side' | 'overhead' | 'orbit';
 export type GripTool = 'orbit' | 'seams' | 'grip';
 export type Units = 'imperial' | 'metric';
 
@@ -54,6 +64,9 @@ export interface ViewSettings {
   camera: CameraView;
   exaggerate: number;
   enlargeBall: boolean;
+  /** Pitcher figure on the mound and release guides. */
+  showPitcher: boolean;
+  showGuides: boolean;
   showRef: boolean;
   showForces: boolean;
   /** Display-only rotational motion blur on the spinning ball (180° virtual shutter). */
@@ -72,6 +85,7 @@ export interface AppState {
   familyOverride: PitchFamily | null;
   overridePresetId: string | null;
   delivery: Delivery;
+  body: BodySettings;
   env: EnvironmentSettings;
   dt: number;
   seamKnuckle: boolean;
@@ -105,6 +119,7 @@ export interface AppState {
   renameSaved: (id: string, name: string) => void;
   setResidualOverride: (rpm: number | null) => void;
   setDelivery: (p: Partial<Delivery>) => void;
+  setBody: (p: Partial<BodySettings>) => void;
   setEnv: (p: Partial<EnvironmentSettings>) => void;
   setView: (p: Partial<ViewSettings>) => void;
   enterPhysicsMode: (fromSpec: ReleaseSpec | null) => void;
@@ -139,7 +154,7 @@ const initialGrip = gripFromPreset(PRESETS[0]);
 const baseState = {
   env: DEFAULT_ENV, dt: 0.001, seamParams: DEFAULT_SEAM_PARAMS, seamKnuckle: true, seamExperimental: false,
 };
-const initialDelivery = aimedDelivery(initialGrip, DEFAULT_DELIVERY, 'R', baseState);
+const initialDelivery = aimedDelivery(initialGrip, linkDelivery(DEFAULT_DELIVERY, {}, DEFAULT_BODY, true), 'R', baseState);
 
 export const useStore = create<AppState>((set, get) => ({
   hand: 'R',
@@ -150,8 +165,9 @@ export const useStore = create<AppState>((set, get) => ({
   familyOverride: null,
   overridePresetId: null,
   delivery: initialDelivery,
+  body: DEFAULT_BODY,
   ...baseState,
-  view: { camera: 'catcher', exaggerate: 1, enlargeBall: true, showRef: true, showForces: true, motionBlur: true, zoneTop: 1.07, zoneBottom: 0.46, units: 'imperial' },
+  view: { camera: 'catcher', exaggerate: 1, enlargeBall: true, showRef: true, showForces: true, motionBlur: true, showPitcher: true, showGuides: true, zoneTop: 1.07, zoneBottom: 0.46, units: 'imperial' },
   t: 0,
   playing: true,
   rate: 0.25,
@@ -250,7 +266,11 @@ export const useStore = create<AppState>((set, get) => ({
       return { savedGrips, grip: s.grip.id === id ? { ...s.grip, name } : s.grip };
     }),
   setResidualOverride: (rpm) => set((s) => ({ grip: { ...s.grip, custom: true, residualSpinOverride: rpm } })),
-  setDelivery: (p) => set((s) => ({ delivery: { ...s.delivery, ...p } })),
+  setDelivery: (p) => set((s) => ({ delivery: linkDelivery(s.delivery, p, s.body) })),
+  setBody: (p) => set((s) => {
+    const body = { ...s.body, ...p };
+    return { body, delivery: linkDelivery(s.delivery, {}, body, 'heightM' in p || (p.link === true && !s.body.link)) };
+  }),
   setEnv: (p) => set((s) => ({ env: { ...s.env, ...p } })),
   setView: (p) => set((s) => ({ view: { ...s.view, ...p } })),
   enterPhysicsMode: (spec) =>

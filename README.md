@@ -18,6 +18,7 @@ npm run build      # typecheck + production build into dist/
 | **Flight physics** | `src/physics/simulate.ts`, `aero.ts`, `seamModel.ts`, `pitch.ts` | Release conditions → trajectory. Has no knowledge of grips, UI or cameras. |
 | State | `src/state/store.ts`, `derived.tsx` | `computeDerived()` is a pure function: grip/delivery → spec → physics. View state is never an input. |
 | Hand display | `src/grip/handModel.ts` | Anatomical hand pose reaching the contacts (display only). |
+| Pitcher body | `src/body/pitcherBody.ts` | Height-scaled release posture; links arm slot ↔ release height/side (shoulder 0.58 H above the mound, reach 0.42 H). |
 | UI | `src/components/*` | Grip editor, flight view, ball close-up, controls, compare and knuckle lab. |
 
 All quantities are SI internally (m, s, kg, rad/s). Display units are converted at the edge (`src/util/units.ts`).

@@ -213,27 +213,70 @@ select { background: var(--navy-0); border: 1px solid var(--line); border-radius
 .model-notes p { font-size: 12.5px; color: #c4d1ee; }
 .model-notes h4 { margin: 12px 0 4px; font-size: 13px; }
 
+/* Pitcher figure + release guides */
+.guide-lbl { font: 600 11px Inter, sans-serif; white-space: nowrap; padding: 2px 7px; border-radius: 5px; background: rgba(7, 15, 31, 0.82); border: 1px solid; user-select: none; }
+.guide-lbl.y { color: #ffd34d; border-color: #8a7020; }
+.guide-lbl.w { color: #cfe8ff; border-color: #2b4f7a; }
+.fv-release { margin-top: 4px; font-size: 12px; color: #dbe5ff; background: rgba(7, 15, 31, 0.75); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; display: inline-block; }
+.fv-release b { color: #ffd34d; font-family: var(--mono); font-weight: 600; }
+.guide-h { font-weight: 600; margin-bottom: 4px; }
+.cues { margin: 0 0 10px; padding-left: 18px; }
+.cues li { margin: 4px 0; font-size: 13px; color: #d6e0f5; }
+.release-card { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 6px 0 8px; }
+.release-card div { background: var(--navy-2); padding: 7px 9px; display: flex; flex-direction: column; }
+.release-card span { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); }
+.release-card b { font-family: var(--mono); font-size: 15px; }
+.release-card em { font-style: normal; font-size: 11px; color: var(--muted); }
+.body-ctl { border: 1px dashed var(--line); border-radius: 8px; padding: 4px 9px 8px; margin: 6px 0 10px; }
+
 /* Mobile */
-.mobile { flex: 1; overflow-y: auto; }
-.tabs.mob { position: sticky; top: 0; z-index: 5; }
-.tabs.mob button { padding: 13px 4px; font-size: 14px; }
-.mobile .grip-editor { height: 62vh; min-height: 360px; }
-.mobile .flight-view { height: 62vh; min-height: 380px; flex: none; }
+.mobile { flex: 1; overflow-y: auto; overflow-x: hidden; padding-bottom: calc(62px + env(safe-area-inset-bottom)); -webkit-overflow-scrolling: touch; }
+.tabs.mob { position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 20; border-top: 1px solid var(--line); border-bottom: 0; padding-bottom: env(safe-area-inset-bottom); background: rgba(11, 23, 48, 0.97); backdrop-filter: blur(8px); }
+.tabs.mob button { padding: 12px 4px 14px; font-size: 14px; border-bottom: 0; border-top: 3px solid transparent; min-height: 52px; }
+.tabs.mob button.on { border-top-color: var(--red); }
+.mobile .grip-editor { height: 58vh; min-height: 340px; }
+.mobile .flight-view { height: 58vh; min-height: 340px; flex: none; }
 .mobile .key-metrics { grid-template-columns: repeat(4, 1fr); }
+.mobile .km { padding: 6px 7px; }
+.mobile .km b { font-size: 13.5px; }
 .mobile .closeup { width: 190px; }
 .mobile .cu-canvas { height: 120px; }
 .mobile .cu-stats { grid-template-columns: 1fr; }
-.mobile .fv-legend { max-width: calc(100% - 210px); }
-.mobile .nf-row input[type='range'] { height: 32px; }
+.mobile .nf-row input[type='range'] { height: 34px; }
+.mobile .panel { padding: 4px 14px 18px; }
+.mobile .section-h { padding: 14px 2px; font-size: 15px; }
+.mobile .btn { min-height: 40px; padding: 8px 12px; }
+.mobile .fchip button { padding: 9px 0; }
+.mobile .preset { padding: 10px 9px; font-size: 13.5px; }
+.mobile .playback { position: sticky; top: 0; z-index: 6; }
+/* single-row swipeable toolbars instead of wrapped buttons covering the 3D view */
+.mobile .seg { flex-wrap: nowrap; }
+.mobile .ge-toolbar, .mobile .fv-toolbar, .mobile .ge-views { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.mobile .ge-toolbar::-webkit-scrollbar, .mobile .fv-toolbar::-webkit-scrollbar, .mobile .ge-views::-webkit-scrollbar { display: none; }
+.mobile .ge-toolbar > *, .mobile .ge-views > * { flex: none; }
+.mobile .seg button { white-space: nowrap; padding: 7px 10px; }
+.mobile .ge-hint, .mobile .ge-legend { display: none; }
+.mobile .ge-views { bottom: 8px !important; }
+.mobile .ge-views { bottom: 26px; }
+.mobile .ge-views button { padding: 6px 9px; font-size: 12px; white-space: nowrap; }
+.mobile .fv-toolbar .seg { width: auto; }
 @media (max-width: 900px) {
+  /* 16px inputs stop iOS Safari from zooming the page when a field is tapped */
+  input, select, .nf-num, .txt { font-size: 16px; }
+  .nf-num { width: 96px; }
   .h-hint { display: none; }
+  .app-h { flex-wrap: nowrap; gap: 8px; padding: 6px 12px; padding-top: max(6px, env(safe-area-inset-top)); overflow: hidden; }
+  .h-status { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .h-status::-webkit-scrollbar { display: none; }
+  .pill { white-space: nowrap; }
   .fv-toolbar { left: 8px; right: 8px; }
-  .fv-toolbar .seg { width: 100%; justify-content: space-between; }
-  .fv-label { top: 48px; }
+  .fv-label { top: 50px; max-width: 70%; }
+  .fv-title { font-size: 10.5px; }
+  .fv-sides, .fv-arm { font-size: 10.5px; }
+  .fv-release { font-size: 11px; }
   .fv-legend { display: none; }
-  .app-h { flex-wrap: wrap; gap: 8px; padding: 6px 10px; }
-  .fv-label { max-width: 60%; }
-  .exag-banner { top: auto; bottom: 200px; }
+  .exag-banner { top: auto; bottom: 150px; font-size: 11px; max-width: 200px; }
+  .guide-lbl { font-size: 10px; padding: 1px 5px; }
 }
 @media (max-width: 1250px) and (min-width: 901px) {
   .key-metrics { grid-template-columns: repeat(4, 1fr); }

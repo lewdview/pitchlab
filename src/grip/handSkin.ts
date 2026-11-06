@@ -22,7 +22,7 @@ export interface SkinField {
   half: number;
 }
 
-type Prim = { lo: Vec3; hi: Vec3; d: (x: number, y: number, z: number) => number };
+export type Prim = { lo: Vec3; hi: Vec3; d: (x: number, y: number, z: number) => number };
 
 const smin = (a: number, b: number, k: number) => {
   const h = Math.max(k - Math.abs(a - b), 0) / k;
@@ -30,7 +30,7 @@ const smin = (a: number, b: number, k: number) => {
 };
 
 /** Exact SDF of a round cone (capsule with different end radii), after Inigo Quilez. */
-function roundCone(a: Vec3, b: Vec3, r1: number, r2: number): Prim {
+export function roundCone(a: Vec3, b: Vec3, r1: number, r2: number): Prim {
   const ba = sub(b, a);
   const l2 = dot(ba, ba);
   const rr = r1 - r2;
@@ -56,7 +56,7 @@ function roundCone(a: Vec3, b: Vec3, r1: number, r2: number): Prim {
 }
 
 /** Approximate SDF of an ellipsoid with semi-axes r along the orthonormal axes ex, ey, ez. */
-function ellipsoid(c: Vec3, ex: Vec3, ey: Vec3, ez: Vec3, r: Vec3): Prim {
+export function ellipsoid(c: Vec3, ex: Vec3, ey: Vec3, ez: Vec3, r: Vec3): Prim {
   const m = Math.max(r[0], r[1], r[2]);
   return {
     lo: [c[0] - m, c[1] - m, c[2] - m],
@@ -166,4 +166,37 @@ export function skinDistanceAt(sf: SkinField, p: Vec3): number {
   const idx = (k: number) => Math.round(((p[k] - sf.center[k]) / sf.half) * hs + hs);
   const x = idx(0), y = idx(1), z = idx(2);
   return -sf.field[x + y * sf.size + z * sf.size * sf.size];
+}
+
+let genBuf: Float32Array | null = null;
+
+/** Generic smooth-union field of primitives (used for the pitcher's body). Same grid convention as buildSkinField. */
+export function fieldFromPrims(prims: Prim[], size: number, k: number, out?: Float32Array): SkinField {
+  const lo: Vec3 = [Infinity, Infinity, Infinity], hi: Vec3 = [-Infinity, -Infinity, -Infinity];
+  for (const p of prims) for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], p.lo[a]); hi[a] = Math.max(hi[a], p.hi[a]); }
+  const margin = Math.max(0.05, k * 2.5);
+  const center: Vec3 = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, (lo[2] + hi[2]) / 2];
+  const half = Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]) / 2 + margin * 1.5;
+  const hs = size / 2, size2 = size * size, size3 = size2 * size;
+  if (!genBuf || genBuf.length !== size3) genBuf = new Float32Array(size3);
+  const total = genBuf;
+  total.fill(BIG);
+  const toWorld = (i: number, a: number) => center[a] + (half * (i - hs)) / hs;
+  const toIndex = (v: number, a: number) => ((v - center[a]) / half) * hs + hs;
+  for (const p of prims) {
+    const r = (a: number): [number, number] => [Math.max(1, Math.floor(toIndex(p.lo[a] - margin, a))), Math.min(size - 2, Math.ceil(toIndex(p.hi[a] + margin, a)))];
+    const [x0, x1] = r(0), [y0, y1] = r(1), [z0, z1] = r(2);
+    for (let z = z0; z <= z1; z++) {
+      const wz = toWorld(z, 2);
+      for (let y = y0; y <= y1; y++) {
+        const wy = toWorld(y, 1), row = z * size2 + y * size;
+        for (let x = x0; x <= x1; x++) { const i = row + x; total[i] = smin(total[i], p.d(toWorld(x, 0), wy, wz), k); }
+      }
+    }
+  }
+  const voxel = (2 * half) / size;
+  const clampV = Math.max(CLAMP * 0.2, voxel * 4);
+  const field = out && out.length === size3 ? out : new Float32Array(size3);
+  for (let i = 0; i < size3; i++) field[i] = Math.max(-clampV, Math.min(clampV, -total[i]));
+  return { field, size, center, half };
 }

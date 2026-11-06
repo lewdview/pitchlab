@@ -9,6 +9,7 @@ import {
   tiltToClock, speedToDisplay, speedFromDisplay, speedUnit, lenToDisplay, lenFromDisplay, lenUnit,
 } from '../util/units';
 import { IN } from '../physics/constants';
+import { slotName } from '../body/pitcherBody';
 
 function EstimateCard() {
   const { estimate } = useDerived();
@@ -106,6 +107,24 @@ function SpinControls() {
   );
 }
 
+function BodyControls() {
+  const body = useStore((s) => s.body);
+  const setBody = useStore((s) => s.setBody);
+  const units = useStore((s) => s.view.units);
+  const set = useStore((s) => s.set);
+  const setView = useStore((s) => s.setView);
+  const ft = body.heightM / 0.3048;
+  const feet = Math.floor(ft + 1e-6), inches = Math.round((ft - feet) * 12);
+  return (
+    <div className="body-ctl">
+      <NumField label={<>Your height <span className="muted">{units === 'imperial' ? `${feet}′${inches}″` : ''}</span></>} value={units === 'imperial' ? body.heightM / 0.0254 : body.heightM * 100} min={units === 'imperial' ? 54 : 137} max={units === 'imperial' ? 84 : 213} step={0.5} digits={1} unit={units === 'imperial' ? 'in' : 'cm'} onChange={(v) => setBody({ heightM: units === 'imperial' ? v * 0.0254 : v / 100 })} />
+      <label className="chk"><input type="checkbox" checked={body.link} onChange={(e) => setBody({ link: e.target.checked })} /> Link release point to my body and arm slot</label>
+      <p className="fine">On: arm slot sets release height and side from your shoulder position and arm length. Editing height or side updates the implied arm slot instead.</p>
+      <button className="btn wide" onClick={() => { set({ playing: false, t: 0 }); setView({ camera: 'behind', showPitcher: true }); }}>See my release from behind</button>
+    </div>
+  );
+}
+
 function DeliveryControls() {
   const d = useStore((s) => s.delivery);
   const setD = useStore((s) => s.setDelivery);
@@ -118,7 +137,10 @@ function DeliveryControls() {
       {mode === 'guided' && (
         <NumField label="Arm speed (fastball velocity)" value={speedToDisplay(d.armSpeedMph * 0.44704, units)} min={speedToDisplay(26.8, units)} max={speedToDisplay(46, units)} step={0.1} unit={speedUnit(units)} onChange={(v) => setD({ armSpeedMph: speedFromDisplay(v, units) / 0.44704 })} hint="Each pitch family releases at a fraction of this." />
       )}
+      <BodyControls />
+      <NumField label={<>Arm slot <span className="muted">({slotName(d.armSlotDeg)})</span></>} value={d.armSlotDeg} min={0} max={120} step={1} digits={0} unit="°" onChange={(v) => setD({ armSlotDeg: v })} hint="Angle of your arm from vertical, seen from behind: 0° over the top, ~45° three-quarter, ~90° sidearm. In Guided mode it also rotates the estimated spin axis." />
       <NumField label="Release height" value={lenToDisplay(d.releaseHeight, units)} min={lenToDisplay(0.9, units)} max={lenToDisplay(2.4, units)} step={0.01} digits={2} unit={lenUnit(units)} onChange={(v) => setD({ releaseHeight: lenFromDisplay(v, units) })} />
+      <NumField label="Release side (+ arm side)" value={lenToDisplay(d.releaseSide, units)} min={lenToDisplay(-0.5, units)} max={lenToDisplay(1.3, units)} step={0.01} digits={2} unit={lenUnit(units)} onChange={(v) => setD({ releaseSide: lenFromDisplay(v, units) })} />
       <NumField label="Extension" value={lenToDisplay(d.extension, units)} min={lenToDisplay(1.0, units)} max={lenToDisplay(2.5, units)} step={0.01} digits={2} unit={lenUnit(units)} onChange={(v) => setD({ extension: lenFromDisplay(v, units) })} hint="Distance in front of the rubber at release; longer extension shortens the flight." />
       <NumField label="Vertical release angle" value={d.vAngleDeg} min={-8} max={8} step={0.05} digits={2} unit="°" onChange={(v) => setD({ vAngleDeg: v })} />
       <NumField label="Horizontal release angle (+ arm side)" value={d.hAngleDeg} min={-8} max={8} step={0.05} digits={2} unit="°" onChange={(v) => setD({ hAngleDeg: v })} />
@@ -128,18 +150,13 @@ function DeliveryControls() {
 }
 
 function AdvancedControls() {
-  const d = useStore((s) => s.delivery);
-  const setD = useStore((s) => s.setDelivery);
   const env = useStore((s) => s.env);
   const setEnv = useStore((s) => s.setEnv);
-  const units = useStore((s) => s.view.units);
   const target = useStore((s) => s.aimTarget);
   const set = useStore((s) => s.set);
   const dt = useStore((s) => s.dt);
   return (
     <div>
-      <NumField label="Lateral release position (+ arm side)" value={lenToDisplay(d.releaseSide, units)} min={lenToDisplay(-0.5, units)} max={lenToDisplay(1.3, units)} step={0.01} digits={2} unit={lenUnit(units)} onChange={(v) => setD({ releaseSide: lenFromDisplay(v, units) })} />
-      <NumField label="Arm slot (0° over the top, 90° sidearm)" value={d.armSlotDeg} min={0} max={100} step={1} digits={0} unit="°" onChange={(v) => setD({ armSlotDeg: v })} hint="Guided mode: rotates the estimated spin axis." />
       <NumField label="Aim target height" value={target.y / IN} min={10} max={50} step={0.5} unit="in" onChange={(v) => set({ aimTarget: { ...target, y: v * IN } })} />
       <NumField label="Aim target side (+ catcher's right)" value={target.x / IN} min={-20} max={20} step={0.5} unit="in" onChange={(v) => set({ aimTarget: { ...target, x: v * IN } })} />
       <div className="subhead">Air and wind (optional)</div>
@@ -164,6 +181,8 @@ function ViewControls() {
       <NumField label="Movement exaggeration" value={v.exaggerate} min={1} max={6} step={1} digits={0} unit="×" onChange={(x) => setView({ exaggerate: Math.round(x) })} hint="1× = true scale. Larger values scale deviation from the no-lift path for display only." />
       <label className="chk"><input type="checkbox" checked={v.showRef} onChange={(e) => setView({ showRef: e.target.checked })} /> Show no-lift reference (dashed)</label>
       <label className="chk"><input type="checkbox" checked={v.showForces} onChange={(e) => setView({ showForces: e.target.checked })} /> Force arrows in slow motion</label>
+      <label className="chk"><input type="checkbox" checked={v.showPitcher} onChange={(e) => setView({ showPitcher: e.target.checked })} /> Show the pitcher at release</label>
+      <label className="chk"><input type="checkbox" checked={v.showGuides} onChange={(e) => setView({ showGuides: e.target.checked })} /> Release guides (arm slot, height, side, extension)</label>
       <label className="chk"><input type="checkbox" checked={v.motionBlur} onChange={(e) => setView({ motionBlur: e.target.checked })} /> Motion blur on the spinning ball</label>
       <p className="fine">Display only: seams smear over the angle the ball turns during a 180° shutter at the current playback speed. Real-time fastballs blur heavily; slow motion and knuckleballs stay sharp.</p>
       <label className="chk"><input type="checkbox" checked={v.enlargeBall} onChange={(e) => setView({ enlargeBall: e.target.checked })} /> Draw ball 3× size for visibility</label>
