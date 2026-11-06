@@ -14,8 +14,17 @@ import type { Vec3 } from '../physics/vec';
 import { add, scale, sub, norm, cross } from '../physics/vec';
 import { fmtLong } from '../util/units';
 
-const RES = 96;
+const RES = 112;
 const noRaycast = () => null;
+
+/** Uniform colours (sRGB hex -> linear for vertex colours). */
+const UNIFORM = {
+  jersey: '#f3f1ea', pants: '#e6e3da', socks: '#1b2d57', undershirt: '#1b2d57', belt: '#13213f', cleats: '#151515', skin: '#d39b78',
+};
+const lin = (hex: string): Vec3 => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
+const C = Object.fromEntries(Object.entries(UNIFORM).map(([k, v]) => [k, lin(v)])) as Record<keyof typeof UNIFORM, Vec3>;
+const paint = (pr: Prim, color: Vec3): Prim => ({ ...pr, color });
+const lerp3 = (a: Vec3, b: Vec3, t: number): Vec3 => add(a, scale(sub(b, a), t));
 
 function bodyPrims(p: BodyPose): Prim[] {
   const k = p.H / 1.88;
@@ -24,23 +33,35 @@ function bodyPrims(p: BodyPose): Prim[] {
   const fwd = norm(cross(lat, up));
   const lat2 = norm(cross(up, fwd));
   const headUp = norm(sub(p.head, p.neck));
+  const sleeveT = lerp3(p.shoulderT, p.elbowT, 0.45), sleeveG = lerp3(p.shoulderG, p.elbowG, 0.45);
+  const belt = add(p.pelvis, scale(up, 0.13 * k));
   return [
-    ellipsoid(p.head, lat2, headUp, fwd, [0.078 * k, 0.1 * k, 0.09 * k]),
-    roundCone(p.neck, add(p.neck, scale(headUp, 0.09 * k)), 0.055 * k, 0.048 * k),
-    ellipsoid(p.chest, lat2, up, fwd, [0.18 * k, 0.22 * k, 0.125 * k]),
-    ellipsoid(add(p.pelvis, scale(up, 0.06 * k)), lat2, up, fwd, [0.165 * k, 0.14 * k, 0.115 * k]),
-    roundCone(p.pelvis, p.neck, 0.15 * k, 0.15 * k),
-    roundCone(p.shoulderG, p.shoulderT, 0.062 * k, 0.062 * k),
-    roundCone(p.shoulderT, p.elbowT, 0.052 * k, 0.041 * k),
-    roundCone(p.elbowT, p.wristT, 0.041 * k, 0.026 * k),
-    roundCone(p.shoulderG, p.elbowG, 0.052 * k, 0.041 * k),
-    roundCone(p.elbowG, p.wristG, 0.041 * k, 0.03 * k),
-    roundCone(p.hipF, p.kneeF, 0.085 * k, 0.058 * k),
-    roundCone(p.kneeF, p.ankleF, 0.056 * k, 0.04 * k),
-    roundCone(p.ankleF, p.toeF, 0.045 * k, 0.036 * k),
-    roundCone(p.hipB, p.kneeB, 0.085 * k, 0.058 * k),
-    roundCone(p.kneeB, p.ankleB, 0.056 * k, 0.04 * k),
-    roundCone(p.ankleB, p.toeB, 0.045 * k, 0.036 * k),
+    // head and neck
+    paint(ellipsoid(p.head, lat2, headUp, fwd, [0.078 * k, 0.1 * k, 0.09 * k]), C.skin),
+    paint(roundCone(p.neck, add(p.neck, scale(headUp, 0.09 * k)), 0.055 * k, 0.048 * k), C.skin),
+    // jersey: chest, back, shoulders, short sleeves
+    paint(ellipsoid(p.chest, lat2, up, fwd, [0.18 * k, 0.22 * k, 0.125 * k]), C.jersey),
+    paint(roundCone(belt, p.neck, 0.15 * k, 0.15 * k), C.jersey),
+    paint(roundCone(p.shoulderG, p.shoulderT, 0.064 * k, 0.064 * k), C.jersey),
+    paint(roundCone(p.shoulderT, sleeveT, 0.058 * k, 0.05 * k), C.jersey),
+    paint(roundCone(p.shoulderG, sleeveG, 0.058 * k, 0.05 * k), C.jersey),
+    // undershirt sleeves to the elbow, then bare forearms
+    paint(roundCone(sleeveT, p.elbowT, 0.046 * k, 0.041 * k), C.undershirt),
+    paint(roundCone(sleeveG, p.elbowG, 0.046 * k, 0.041 * k), C.undershirt),
+    paint(roundCone(p.elbowT, p.wristT, 0.04 * k, 0.026 * k), C.skin),
+    paint(roundCone(p.elbowG, p.wristG, 0.04 * k, 0.03 * k), C.skin),
+    // belt and pants
+    paint(roundCone(add(belt, scale(lat2, -0.14 * k)), add(belt, scale(lat2, 0.14 * k)), 0.03 * k, 0.03 * k), C.belt),
+    paint(ellipsoid(add(p.pelvis, scale(up, 0.03 * k)), lat2, up, fwd, [0.17 * k, 0.13 * k, 0.12 * k]), C.pants),
+    paint(roundCone(p.hipF, p.kneeF, 0.088 * k, 0.06 * k), C.pants),
+    paint(roundCone(p.hipB, p.kneeB, 0.088 * k, 0.06 * k), C.pants),
+    paint(roundCone(p.kneeF, lerp3(p.kneeF, p.ankleF, 0.22), 0.058 * k, 0.054 * k), C.pants),
+    paint(roundCone(p.kneeB, lerp3(p.kneeB, p.ankleB, 0.22), 0.058 * k, 0.054 * k), C.pants),
+    // high socks and cleats
+    paint(roundCone(lerp3(p.kneeF, p.ankleF, 0.22), p.ankleF, 0.052 * k, 0.04 * k), C.socks),
+    paint(roundCone(lerp3(p.kneeB, p.ankleB, 0.22), p.ankleB, 0.052 * k, 0.04 * k), C.socks),
+    paint(roundCone(p.ankleF, p.toeF, 0.047 * k, 0.037 * k), C.cleats),
+    paint(roundCone(p.ankleB, p.toeB, 0.047 * k, 0.037 * k), C.cleats),
   ];
 }
 
@@ -67,16 +88,18 @@ export function PitcherFigure({ traj, showGripBall, compact = false }: { traj: T
   const wrist = useMemo(() => add(release, scale(handPose.wrist, BALL_RADIUS)), [release, handPose]);
   const pose = useMemo(() => poseBody(body, hand, release, wrist, slot), [body, hand, release, wrist, slot]);
 
-  const material = useMemo(() => new THREE.MeshStandardMaterial({ color: '#e3e8f2', roughness: 0.85, metalness: 0 }), []);
+  const material = useMemo(() => new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0 }), []);
   const mc = useMemo(() => {
-    const m = new MarchingCubes(RES, material, false, false, 160000);
+    const m = new MarchingCubes(RES, material, false, true, 180000);
     m.isolation = 0;
     m.raycast = noRaycast;
+    m.castShadow = true;
+    m.receiveShadow = true;
     return m;
   }, [material]);
   useEffect(() => () => { mc.geometry.dispose(); }, [mc]);
   useMemo(() => {
-    const sf = fieldFromPrims(bodyPrims(pose), RES, 0.035, mc.field);
+    const sf = fieldFromPrims(bodyPrims(pose), RES, 0.03, mc.field, mc.palette);
     (mc as unknown as { normal_cache: Float32Array }).normal_cache.fill(0);
     mc.position.set(sf.center[0], sf.center[1], sf.center[2]);
     mc.scale.setScalar(sf.half);
@@ -89,15 +112,28 @@ export function PitcherFigure({ traj, showGripBall, compact = false }: { traj: T
   return (
     <group>
       <primitive object={mc} />
-      {/* cap and glove */}
-      <mesh position={add(pose.head, [0, 0.06 * k, -0.01])} raycast={noRaycast} scale={[1, 0.55, 1.1]}>
-        <sphereGeometry args={[0.095 * k, 24, 16]} />
-        <meshStandardMaterial color="#13284d" roughness={0.7} />
-      </mesh>
-      <mesh position={pose.wristG} raycast={noRaycast} scale={[1, 1.25, 0.6]}>
-        <sphereGeometry args={[0.1 * k, 24, 16]} />
-        <meshStandardMaterial color="#7a4a26" roughness={0.75} />
-      </mesh>
+      {/* cap: crown + brim facing the plate */}
+      <group position={add(pose.head, [0, 0.045 * k, 0])}>
+        <mesh raycast={noRaycast} scale={[1, 0.62, 1.08]} castShadow>
+          <sphereGeometry args={[0.092 * k, 28, 18, 0, Math.PI * 2, 0, Math.PI * 0.58]} />
+          <meshStandardMaterial color="#13284d" roughness={0.75} side={THREE.DoubleSide} />
+        </mesh>
+        <mesh raycast={noRaycast} position={[0, 0.006 * k, -0.095 * k]} rotation={[0.18, 0, 0]} scale={[1, 1, 0.75]} castShadow>
+          <cylinderGeometry args={[0.07 * k, 0.07 * k, 0.008 * k, 28, 1, false, -Math.PI / 2, Math.PI]} />
+          <meshStandardMaterial color="#0f2142" roughness={0.7} />
+        </mesh>
+      </group>
+      {/* glove: pocket and finger stalls */}
+      <group position={pose.wristG}>
+        <mesh raycast={noRaycast} scale={[1, 1.2, 0.62]} castShadow>
+          <sphereGeometry args={[0.1 * k, 24, 16]} />
+          <meshStandardMaterial color="#7b4a24" roughness={0.68} />
+        </mesh>
+        <mesh raycast={noRaycast} position={[0, 0.1 * k, 0]} scale={[0.9, 0.9, 0.5]} castShadow>
+          <sphereGeometry args={[0.09 * k, 20, 14]} />
+          <meshStandardMaterial color="#6a3d1c" roughness={0.7} />
+        </mesh>
+      </group>
       {/* the grip hand holding the ball at the release point, in the release orientation */}
       <group position={release} scale={BALL_RADIUS}>
         <HandViz fingers={fingers} hand={hand} size={handSize} style="solid" />

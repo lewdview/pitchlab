@@ -9,11 +9,12 @@ import { exaggerate, pathPoints } from './paths';
 import { orientationAt, stateAt, flightEnd, armSideX, type Trajectory } from '../physics/simulate';
 import type { PitchResult } from '../physics/pitch';
 import {
-  BALL_RADIUS, MOUND_CENTER_Z, MOUND_HEIGHT, MOUND_RADIUS, PLATE_FRONT_Z, PLATE_WIDTH, RUBBER_TO_PLATE, IN,
+  BALL_RADIUS, PLATE_FRONT_Z, PLATE_WIDTH, RUBBER_TO_PLATE,
 } from '../physics/constants';
 import { len, norm } from '../physics/vec';
 import { BallCloseup } from './BallCloseup';
 import { PitcherFigure } from './PitcherFigure';
+import { Ballpark, StadiumLights } from './Ballpark';
 import { fmtLong } from '../util/units';
 import { slotName } from '../body/pitcherBody';
 
@@ -46,24 +47,7 @@ function Field() {
   const dy = (zoneTop - zoneBottom) / 3;
   return (
     <group>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.002, 9]}>
-        <planeGeometry args={[60, 60]} />
-        <meshStandardMaterial color="#14301f" roughness={1} />
-      </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, -0.001, 0.3]}>
-        <circleGeometry args={[4, 48]} />
-        <meshStandardMaterial color="#4a3426" roughness={1} />
-      </mesh>
-      {/* mound: 18 ft diameter, 10 in high */}
-      <mesh position={[0, MOUND_HEIGHT / 2, MOUND_CENTER_Z]}>
-        <cylinderGeometry args={[MOUND_RADIUS * 0.35, MOUND_RADIUS, MOUND_HEIGHT, 48]} />
-        <meshStandardMaterial color="#5a3f2c" roughness={1} />
-      </mesh>
-      <mesh position={[0, MOUND_HEIGHT + 0.01, RUBBER_TO_PLATE + 3 * IN]}>
-        <boxGeometry args={[24 * IN, 0.02, 6 * IN]} />
-        <meshStandardMaterial color="#f5f5f5" />
-      </mesh>
-      <mesh rotation-x={Math.PI / 2} position={[0, 0.004, 0]}>
+      <mesh rotation-x={Math.PI / 2} position={[0, 0.012, 0]} receiveShadow>
         <shapeGeometry args={[plate]} />
         <meshStandardMaterial color="#f7f7f2" side={THREE.DoubleSide} />
       </mesh>
@@ -153,31 +137,31 @@ function Cameras({ view, release }: { view: CameraView; release: [number, number
   const size = useThree((s) => s.size);
   if (view === 'side') {
     const zoom = Math.min(size.width / 21, size.height / 4.2);
-    return <OrthographicCamera key="side" makeDefault position={[-30, 1.1, 9.4]} zoom={zoom} near={0.1} far={100} onUpdate={(c) => c.lookAt(0, 1.1, 9.4)} />;
+    return <OrthographicCamera key="side" makeDefault position={[-30, 1.1, 9.4]} zoom={zoom} near={0.1} far={200} onUpdate={(c) => c.lookAt(0, 1.1, 9.4)} />;
   }
   if (view === 'overhead') {
     const zoom = Math.min(size.height / 21, size.width / 4.5);
-    return <OrthographicCamera key="top" makeDefault position={[0, 30, 9.4]} up={[0, 0, 1]} zoom={zoom} near={0.1} far={100} onUpdate={(c) => { c.up.set(0, 0, 1); c.lookAt(0, 0, 9.4); }} />;
+    return <OrthographicCamera key="top" makeDefault position={[0, 30, 9.4]} up={[0, 0, 1]} zoom={zoom} near={0.1} far={200} onUpdate={(c) => { c.up.set(0, 0, 1); c.lookAt(0, 0, 9.4); }} />;
   }
   if (view === 'behind') {
     // behind the mound, slightly to the arm side: whole body, arm slot and release height in frame
     const sx = Math.sign(release[0]) || 1;
-    return <PerspectiveCamera key="behind" makeDefault position={[sx * 0.75, 1.95, RUBBER_TO_PLATE + 2.9]} fov={50} near={0.05} far={200} onUpdate={(c) => c.lookAt(sx * 0.1, 1.3, RUBBER_TO_PLATE - 1.6)} />;
+    return <PerspectiveCamera key="behind" makeDefault position={[sx * 0.75, 1.95, RUBBER_TO_PLATE + 2.9]} fov={50} near={0.05} far={500} onUpdate={(c) => c.lookAt(sx * 0.1, 1.3, RUBBER_TO_PLATE - 1.6)} />;
   }
   if (view === 'release') {
     // close behind the throwing hand at release: grip, wrist and forearm orientation
     const sx = Math.sign(release[0]) || 1;
-    return <PerspectiveCamera key="release" makeDefault position={[release[0] + sx * 0.55, release[1] + 0.22, release[2] + 0.75]} fov={30} near={0.02} far={200} onUpdate={(c) => c.lookAt(release[0], release[1], release[2])} />;
+    return <PerspectiveCamera key="release" makeDefault position={[release[0] + sx * 0.55, release[1] + 0.22, release[2] + 0.75]} fov={30} near={0.02} far={500} onUpdate={(c) => c.lookAt(release[0], release[1], release[2])} />;
   }
   if (view === 'pitcher') {
-    return <PerspectiveCamera key="pitcher" makeDefault position={[release[0] * 0.4, 2.05, release[2] + 2.6]} fov={16} near={0.05} far={200} onUpdate={(c) => c.lookAt(0, 0.85, 0)} />;
+    return <PerspectiveCamera key="pitcher" makeDefault position={[release[0] * 0.4, 2.05, release[2] + 2.6]} fov={16} near={0.05} far={500} onUpdate={(c) => c.lookAt(0, 0.85, 0)} />;
   }
   if (view === 'catcher') {
-    return <PerspectiveCamera key="catcher" makeDefault position={[0, 0.95, -2.3]} fov={24} near={0.05} far={200} onUpdate={(c) => c.lookAt(0, 1.25, 16)} />;
+    return <PerspectiveCamera key="catcher" makeDefault position={[0, 0.95, -2.3]} fov={24} near={0.05} far={500} onUpdate={(c) => c.lookAt(0, 1.25, 16)} />;
   }
   return (
     <>
-      <PerspectiveCamera key="orbit" makeDefault position={[-6, 3.2, -3]} fov={40} near={0.05} far={300} />
+      <PerspectiveCamera key="orbit" makeDefault position={[-6, 3.2, -3]} fov={40} near={0.05} far={500} />
       <OrbitControls target={[0, 1, 8]} makeDefault />
     </>
   );
@@ -222,11 +206,11 @@ export function FlightView() {
         </div>
       </div>
       <div className="fv-canvas">
-        <Canvas dpr={[1, 2]} gl={{ antialias: true }}>
-          <color attach="background" args={['#0a1428']} />
-          <fog attach="fog" args={['#0a1428', 35, 70]} />
-          <ambientLight intensity={0.6} />
-          <directionalLight position={[-5, 12, 4]} intensity={1.4} />
+        <Canvas dpr={typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches ? [1, 1.5] : [1, 2]} shadows gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}>
+          <color attach="background" args={['#0d1f42']} />
+          <fog attach="fog" args={['#1a3157', 70, 240]} />
+          <StadiumLights />
+          <Ballpark />
           <Cameras view={view.camera} release={release} />
           <Field />
           {pinned.filter((p) => p.visible).map((p) => <TrajectoryLine key={p.id} res={p.result} k={k} color={p.color} width={2} />)}

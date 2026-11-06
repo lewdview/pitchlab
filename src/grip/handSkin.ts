@@ -22,7 +22,7 @@ export interface SkinField {
   half: number;
 }
 
-export type Prim = { lo: Vec3; hi: Vec3; d: (x: number, y: number, z: number) => number };
+export type Prim = { lo: Vec3; hi: Vec3; d: (x: number, y: number, z: number) => number; color?: Vec3 };
 
 const smin = (a: number, b: number, k: number) => {
   const h = Math.max(k - Math.abs(a - b), 0) / k;
@@ -169,9 +169,12 @@ export function skinDistanceAt(sf: SkinField, p: Vec3): number {
 }
 
 let genBuf: Float32Array | null = null;
+let nearBuf: Float32Array | null = null;
 
 /** Generic smooth-union field of primitives (used for the pitcher's body). Same grid convention as buildSkinField. */
-export function fieldFromPrims(prims: Prim[], size: number, k: number, out?: Float32Array): SkinField {
+/** If `palette` is given (MarchingCubes.palette, linear RGB), each voxel takes the colour of the nearest primitive,
+ *  so one smooth surface can carry several materials (jersey, pants, skin, ...). */
+export function fieldFromPrims(prims: Prim[], size: number, k: number, out?: Float32Array, palette?: Float32Array): SkinField {
   const lo: Vec3 = [Infinity, Infinity, Infinity], hi: Vec3 = [-Infinity, -Infinity, -Infinity];
   for (const p of prims) for (let a = 0; a < 3; a++) { lo[a] = Math.min(lo[a], p.lo[a]); hi[a] = Math.max(hi[a], p.hi[a]); }
   const margin = Math.max(0.05, k * 2.5);
@@ -181,6 +184,9 @@ export function fieldFromPrims(prims: Prim[], size: number, k: number, out?: Flo
   if (!genBuf || genBuf.length !== size3) genBuf = new Float32Array(size3);
   const total = genBuf;
   total.fill(BIG);
+  if (palette && (!nearBuf || nearBuf.length !== size3)) nearBuf = new Float32Array(size3);
+  const near = nearBuf;
+  if (palette && near) { near.fill(BIG); palette.fill(0); }
   const toWorld = (i: number, a: number) => center[a] + (half * (i - hs)) / hs;
   const toIndex = (v: number, a: number) => ((v - center[a]) / half) * hs + hs;
   for (const p of prims) {
@@ -190,7 +196,15 @@ export function fieldFromPrims(prims: Prim[], size: number, k: number, out?: Flo
       const wz = toWorld(z, 2);
       for (let y = y0; y <= y1; y++) {
         const wy = toWorld(y, 1), row = z * size2 + y * size;
-        for (let x = x0; x <= x1; x++) { const i = row + x; total[i] = smin(total[i], p.d(toWorld(x, 0), wy, wz), k); }
+        for (let x = x0; x <= x1; x++) {
+          const i = row + x;
+          const d = p.d(toWorld(x, 0), wy, wz);
+          total[i] = smin(total[i], d, k);
+          if (palette && near && p.color && d < near[i]) {
+            near[i] = d;
+            palette[i * 3] = p.color[0]; palette[i * 3 + 1] = p.color[1]; palette[i * 3 + 2] = p.color[2];
+          }
+        }
       }
     }
   }
