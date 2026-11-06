@@ -21,7 +21,8 @@ import { FINGERS, toWorld, type FingerContact, type FingerId } from './types';
 import type { Hand } from '../physics/simulate';
 
 export const FINGER_LEN: Record<FingerId, number> = { thumb: 2.75, index: 2.0, middle: 2.2, ring: 2.05, little: 1.65 };
-export const FINGER_RADIUS: Record<FingerId, number> = { thumb: 0.25, index: 0.215, middle: 0.22, ring: 0.205, little: 0.18 };
+// Half the finger width at the base, in ball radii (adult male: ~0.8 in across the middle-finger knuckle).
+export const FINGER_RADIUS: Record<FingerId, number> = { thumb: 0.29, index: 0.25, middle: 0.255, ring: 0.24, little: 0.21 };
 const PROPORTIONS: Record<FingerId, [number, number, number]> = {
   thumb: [0.44, 0.31, 0.25], index: [0.46, 0.29, 0.25], middle: [0.46, 0.3, 0.24], ring: [0.46, 0.29, 0.25], little: [0.45, 0.3, 0.25],
 };
@@ -198,7 +199,7 @@ function fingerPose(id: FingerId, f: FingerContact, M: Vec3, c: Vec3, frame: Fra
     if (f.contact === 'pad' || id === 'thumb') {
       // finger pad on the ball; middle phalanx rises off the surface toward the knuckle (flexed PIP)
       const dip = distalOnSurface(T, M, Ld, rho);
-      joints = [M, middleBack(dip, M, id === 'thumb' ? 0.35 : 0.78, Lm, r), dip, T];
+      joints = [M, middleBack(dip, M, id === 'thumb' ? 0.35 : 0.55, Lm, r), dip, T];
     } else if (f.contact === 'knuckle') {
       // bent finger: the DIP knuckle presses the ball, the distal phalanx folds back toward the palm
       const dip = scale(c, 1 + r * 0.95);

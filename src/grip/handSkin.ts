@@ -10,7 +10,7 @@
 // The field is sampled on a voxel grid (only near each part, for speed) and polygonised with marching cubes.
 
 import type { Vec3 } from '../physics/vec';
-import { add, sub, scale, dot } from '../physics/vec';
+import { add, sub, scale, dot, cross } from '../physics/vec';
 import { PALM, type HandPose } from './handModel';
 
 export interface SkinField {
@@ -75,9 +75,30 @@ export function ellipsoid(c: Vec3, ex: Vec3, ey: Vec3, ez: Vec3, r: Vec3): Prim 
 
 /** Radii along a finger from knuckle to tip. */
 export function fingerRadii(radius: number, thumb: boolean): number[] {
-  const r = radius * (thumb ? 1.08 : 1);
-  return thumb ? [r * 1.2, r * 1.02, r * 0.95, r * 0.86] : [r * 1.04, r * 0.95, r * 0.87, r * 0.8];
+  const r = radius;
+  return thumb ? [r * 1.2, r * 1.04, r * 0.96, r * 0.9] : [r * 1.0, r * 0.94, r * 0.89, r * 0.86];
 }
+
+/** Round cone with an elliptical cross-section: squashed by `f` along `dorsal` (fingers are wider than deep). */
+function flatRoundCone(a: Vec3, b: Vec3, r1: number, r2: number, dorsal: Vec3, f: number): Prim {
+  const k = 1 / f - 1;
+  const stretch = (p: Vec3): Vec3 => { const t = (p[0] - a[0]) * dorsal[0] + (p[1] - a[1]) * dorsal[1] + (p[2] - a[2]) * dorsal[2]; return [p[0] + dorsal[0] * t * k, p[1] + dorsal[1] * t * k, p[2] + dorsal[2] * t * k]; };
+  const inner = roundCone(a, stretch(b), r1, r2);
+  const base = roundCone(a, b, r1, r2);
+  return {
+    lo: base.lo, hi: base.hi,
+    d: (x, y, z) => { const q = stretch([x, y, z]); return inner.d(q[0], q[1], q[2]) * f; },
+  };
+}
+
+/** Skin tones (linear RGB for vertex colours): knuckles and fingertip pads are a little pinker, the palm lighter. */
+const tone = (hex: string): Vec3 => {
+  const v = parseInt(hex.slice(1), 16);
+  const lin = (c: number) => { const x = c / 255; return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+  return [lin((v >> 16) & 255), lin((v >> 8) & 255), lin(v & 255)];
+};
+export const SKIN = { base: tone('#d39b7a'), knuckle: tone('#d1937a'), pad: tone('#d89c84'), palm: tone('#d9a385') };
+const painted = (pr: Prim, c: Vec3): Prim => ({ ...pr, color: c });
 
 const BIG = 10;
 const CLAMP = 0.3;
@@ -85,27 +106,55 @@ const MARGIN = 0.32;
 let bufA: Float32Array | null = null;
 let bufB: Float32Array | null = null;
 
-export function buildSkinField(pose: HandPose, size: number, out?: Float32Array): SkinField {
+let nearHand: Float32Array | null = null;
+
+export function buildSkinField(pose: HandPose, size: number, out?: Float32Array, palette?: Float32Array): SkinField {
   const s = pose.size;
   const { u, w, n } = pose;
   const halfW = (PALM.width * s) / 2, halfL = (PALM.length * s) / 2, halfT = (PALM.thickness * s) / 2;
   const P = pose.palmCenter;
 
   const palmParts: Prim[] = [
-    ellipsoid(add(P, scale(u, 0.05 * halfL)), w, u, n, [halfW * 0.96, halfL * 1.02, halfT * 0.92]),
-    ellipsoid(add(add(add(P, scale(w, halfW * 0.5)), scale(u, -halfL * 0.42)), scale(n, halfT * 0.25)), w, u, n, [halfW * 0.46, halfL * 0.56, halfT * 1.05]),
-    ellipsoid(pose.thenar.center, w, u, n, [pose.thenar.radius, pose.thenar.radius * 1.4, pose.thenar.radius * 0.85]),
+    painted(ellipsoid(add(P, scale(u, 0.05 * halfL)), w, u, n, [halfW * 0.96, halfL * 1.02, halfT * 0.9]), SKIN.palm),
+    painted(ellipsoid(add(add(add(P, scale(w, halfW * 0.5)), scale(u, -halfL * 0.42)), scale(n, halfT * 0.25)), w, u, n, [halfW * 0.46, halfL * 0.56, halfT * 1.05]), SKIN.palm),
+    painted(ellipsoid(pose.thenar.center, w, u, n, [pose.thenar.radius, pose.thenar.radius * 1.4, pose.thenar.radius * 0.85]), SKIN.palm),
   ];
   const mcp = pose.fingers.slice(1);
   for (let i = 0; i < mcp.length - 1; i++) {
-    palmParts.push(roundCone(mcp[i].joints[0], mcp[i + 1].joints[0], mcp[i].radius * 1.1, mcp[i + 1].radius * 1.1));
+    palmParts.push(painted(roundCone(mcp[i].joints[0], mcp[i + 1].joints[0], mcp[i].radius * 1.08, mcp[i + 1].radius * 1.08), SKIN.base));
   }
+  // knuckle heads on the back of the hand
+  for (const f of mcp) palmParts.push(painted(ellipsoid(add(f.joints[0], scale(n, -f.radius * 0.35)), w, u, n, [f.radius * 0.9, f.radius * 0.95, f.radius * 0.7]), SKIN.knuckle));
   const forearmCut = add(pose.wrist, scale(sub(pose.forearmEnd, pose.wrist), 0.32));
-  palmParts.push(roundCone(add(pose.wrist, scale(u, 0.35 * s)), forearmCut, 0.62 * s, 0.7 * s));
+  palmParts.push(painted(roundCone(add(pose.wrist, scale(u, 0.35 * s)), forearmCut, 0.62 * s, 0.7 * s), SKIN.base));
 
   const fingerParts: Prim[][] = pose.fingers.map((f) => {
-    const rad = fingerRadii(f.radius, f.id === 'thumb');
-    return [0, 1, 2].map((i) => roundCone(f.joints[i], f.joints[i + 1], rad[i], rad[i + 1]));
+    const thumb = f.id === 'thumb';
+    const rad = fingerRadii(f.radius, thumb);
+    const J = f.joints;
+    const segs = [0, 1, 2].map((i) => sub(J[i + 1], J[i]));
+    // lateral axis: perpendicular to the plane the finger bends in; dorsal = back of the finger
+    let lat = cross(segs[0], segs[2]);
+    if (Math.hypot(...lat) < 0.05 * Math.hypot(...segs[0]) * Math.hypot(...segs[2])) lat = w;
+    const latN = scale(lat, 1 / (Math.hypot(...lat) || 1));
+    const dorsals = segs.map((sg) => {
+      let d = cross(latN, sg);
+      const l = Math.hypot(...d) || 1;
+      d = scale(d, 1 / l);
+      return dot(d, f.nail.out) < 0 ? scale(d, -1) : d;
+    });
+    const F = 0.84;
+    const parts: Prim[] = [0, 1, 2].map((i) => painted(flatRoundCone(J[i], J[i + 1], rad[i] * (i === 0 ? 1 : 0.97), rad[i + 1] * 0.97, dorsals[i], F), SKIN.base));
+    // joint knuckles (slightly wider than the shafts) and a rounded fingertip pad
+    for (const j of [1, 2]) {
+      const along = scale(add(segs[j - 1], segs[j]), 0.5);
+      const aN = scale(along, 1 / (Math.hypot(...along) || 1));
+      parts.push(painted(ellipsoid(J[j], latN, aN, dorsals[j], [rad[j] * 1.04, rad[j] * 1.0, rad[j] * 0.88]), SKIN.knuckle));
+    }
+    const tipAlong = scale(segs[2], 1 / (Math.hypot(...segs[2]) || 1));
+    parts.push(painted(ellipsoid(sub(J[3], scale(tipAlong, rad[3] * 0.25)), latN, tipAlong, dorsals[2], [rad[3] * 1.02, rad[3] * 1.3, rad[3] * 0.86]), SKIN.pad));
+    if (thumb) parts.push(painted(ellipsoid(J[0], latN, scale(segs[0], 1 / (Math.hypot(...segs[0]) || 1)), dorsals[0], [rad[0], rad[0] * 1.2, rad[0] * 0.9]), SKIN.palm));
+    return parts;
   });
 
   // cubic grid around everything
@@ -123,6 +172,12 @@ export function buildSkinField(pose: HandPose, size: number, out?: Float32Array)
   const palm = bufA, total = bufB!;
   palm.fill(BIG);
   total.fill(BIG);
+  if (palette && (!nearHand || nearHand.length !== size3)) nearHand = new Float32Array(size3);
+  const near = palette ? nearHand! : null;
+  if (palette && near) { near.fill(BIG); palette.fill(0); }
+  const paint = (i: number, d: number, c?: Vec3) => {
+    if (near && palette && c && d < near[i]) { near[i] = d; palette[i * 3] = c[0]; palette[i * 3 + 1] = c[1]; palette[i * 3 + 2] = c[2]; }
+  };
 
   const range = (p: { lo: Vec3; hi: Vec3 }, k: number): [number, number] => [
     Math.max(1, Math.floor(toIndex(p.lo[k] - MARGIN, k))),
@@ -140,18 +195,23 @@ export function buildSkinField(pose: HandPose, size: number, out?: Float32Array)
     }
   };
 
-  for (const pr of palmParts) visit(pr, (i, x, y, z) => { palm[i] = smin(palm[i], pr.d(x, y, z), 0.25); });
-  for (const parts of fingerParts) {
+  for (const pr of palmParts) visit(pr, (i, x, y, z) => { const d = pr.d(x, y, z); palm[i] = smin(palm[i], d, 0.22); paint(i, d, pr.color); });
+  pose.fingers.forEach((f, fi) => {
+    const parts = fingerParts[fi];
     const box = { lo: [...parts[0].lo] as Vec3, hi: [...parts[0].hi] as Vec3 };
     for (const pr of parts) for (let k = 0; k < 3; k++) { box.lo[k] = Math.min(box.lo[k], pr.lo[k]); box.hi[k] = Math.max(box.hi[k], pr.hi[k]); }
+    const kPalm = f.id === 'thumb' ? 0.26 : 0.14; // the thumb web is broader than the finger bases
     visit(box, (i, x, y, z) => {
-      let df = parts[0].d(x, y, z);
-      df = smin(df, parts[1].d(x, y, z), 0.05);
-      df = smin(df, parts[2].d(x, y, z), 0.05);
-      const comb = smin(palm[i], df, 0.14);
+      let df = BIG;
+      for (let pi = 0; pi < parts.length; pi++) {
+        const d = parts[pi].d(x, y, z);
+        df = pi < 3 ? smin(df, d, 0.05) : smin(df, d, 0.035);
+        paint(i, d, parts[pi].color);
+      }
+      const comb = smin(palm[i], df, kPalm);
       if (comb < total[i]) total[i] = comb;
     });
-  }
+  });
   const field = out && out.length === size3 ? out : new Float32Array(size3);
   for (let i = 0; i < size3; i++) {
     const d = Math.min(total[i], palm[i]);
