@@ -113,16 +113,19 @@ function middleBack(dip: Vec3, M: Vec3, lift: number, Lm: number, r: number): Ve
   return clearOfBall(add(dip, scale(dir, Lm)), r);
 }
 
-/** Distal phalanx pad lying on the ball: DIP is Ld back from the tip along the great circle toward M. */
-function distalOnSurface(T: Vec3, M: Vec3, Ld: number, rho: number): Vec3 {
+/** A joint `Ld` back from point T along the great circle toward the knuckle M, at radius rho * lift.
+ *  (lift > 1 raises the joint slightly off the leather.) */
+function distalOnSurface(T: Vec3, M: Vec3, Ld: number, rho: number, lift = 1.05): Vec3 {
   const Th = norm(T);
   let axis = cross(Th, norm(M));
   axis = len(axis) < 1e-6 ? anyPerp(Th) : norm(axis);
   // never wrap past the knuckle's direction (short thumbs/close knuckles)
   const maxA = 0.75 * angle(Th, M);
-  // the pad touches at the tip; the DIP sits slightly off the leather so the finger reads as curled
-  return scale(rotate(Th, axis, Math.min(Ld / rho, maxA)), rho * 1.05);
+  return scale(rotate(Th, axis, Math.min(Ld / rho, maxA)), rho * lift);
 }
+
+/** How the hand is drawn: firmly holding the ball (set grip), or the instant of release (fingertips only). */
+export type HandPoseMode = 'hold' | 'release';
 
 /** Push any joint that ended up inside the ball (plus finger thickness) back out to the surface. */
 function clearOfBall(p: Vec3, r: number): Vec3 {
@@ -172,7 +175,7 @@ function tipTarget(id: FingerId, c: Vec3, s: number) {
 }
 
 /** Pose of one finger reaching contact c from base M. */
-function fingerPose(id: FingerId, f: FingerContact, M: Vec3, c: Vec3, frame: Frame, s: number): FingerPose {
+function fingerPose(id: FingerId, f: FingerContact, M: Vec3, c: Vec3, frame: Frame, s: number, mode: HandPoseMode): FingerPose {
   const L = FINGER_LEN[id] * s;
   const props = PROPORTIONS[id];
   const r = FINGER_RADIUS[id] * s;
@@ -196,23 +199,31 @@ function fingerPose(id: FingerId, f: FingerContact, M: Vec3, c: Vec3, frame: Fra
     let tanToBase = perp(sub(M, T), c); // along the surface, back toward the knuckle
     tanToBase = len(tanToBase) < 1e-6 ? anyPerp(c) : norm(tanToBase);
     const Lm = props[1] * L;
-    if (f.contact === 'pad' || id === 'thumb') {
-      // finger pad on the ball; middle phalanx rises off the surface toward the knuckle (flexed PIP)
+    const hold = mode === 'hold';
+    if ((f.contact === 'pad' || id === 'thumb') && hold) {
+      // set grip: the ball sits firmly in the fingers. The pads of the distal AND middle phalanges press the
+      // leather (slightly compressed), wrapping around the ball toward the knuckle.
+      const rhoHold = 1 + r * 0.94;
+      const dip = distalOnSurface(T, M, Ld, rhoHold, 1.0);
+      const pip = distalOnSurface(dip, M, Lm, rhoHold, 1.03);
+      joints = [M, pip, dip, T];
+    } else if (f.contact === 'pad' || id === 'thumb') {
+      // release: only the fingertip pads are on the ball; the middle phalanx lifts as the ball rolls off
       const dip = distalOnSurface(T, M, Ld, rho);
       joints = [M, middleBack(dip, M, id === 'thumb' ? 0.35 : 0.55, Lm, r), dip, T];
     } else if (f.contact === 'knuckle') {
       // bent finger: the DIP knuckle presses the ball, the distal phalanx folds back toward the palm
       const dip = scale(c, 1 + r * 0.95);
       const tipDir = norm(add(add(scale(c, 0.55), scale(tanToBase, 0.7)), scale(frame.n, -0.2)));
-      joints = [M, middleBack(dip, M, 0.55, Lm, r), dip, add(dip, scale(tipDir, Ld))];
+      joints = [M, middleBack(dip, M, hold ? 0.3 : 0.55, Lm, r), dip, add(dip, scale(tipDir, Ld))];
     } else {
       // fingertip / fingernail: distal phalanx stands up off the surface
       const lean = f.contact === 'fingernail' ? 0.25 : 0.8; // radians from the surface normal
       const dip = add(T, scale(norm(add(scale(c, Math.cos(lean)), scale(tanToBase, Math.sin(lean)))), Ld));
-      joints = [M, middleBack(dip, M, 0.35, Lm, r), dip, T];
+      joints = [M, middleBack(dip, M, hold ? 0.15 : 0.35, Lm, r), dip, T];
     }
   }
-  joints = joints.map((p, i) => (i === 0 ? p : clearOfBall(p, r * 0.98)));
+  joints = joints.map((p, i) => (i === 0 ? p : clearOfBall(p, r * (mode === 'hold' ? 0.92 : 0.98))));
   // nail on the dorsal side of the distal phalanx
   const a = joints[2], b = joints[3];
   const along = norm(sub(b, a));
@@ -235,7 +246,7 @@ function fingerPose(id: FingerId, f: FingerContact, M: Vec3, c: Vec3, frame: Fra
   return { id, enabled: f.enabled, joints, radius: r, nail: { center: nailCenter, along, out }, contactGap: gap };
 }
 
-export function buildHandPose(fingers: Record<FingerId, FingerContact>, hand: Hand, size = 1): HandPose {
+export function buildHandPose(fingers: Record<FingerId, FingerContact>, hand: Hand, size = 1, mode: HandPoseMode = 'hold'): HandPose {
   const s = size;
   const vec = {} as Record<FingerId, Vec3>;
   for (const id of FINGERS) vec[id] = toWorld(fingers[id], hand);
@@ -248,7 +259,7 @@ export function buildHandPose(fingers: Record<FingerId, FingerContact>, hand: Ha
     let err = 0, n = 0;
     for (const id of FINGERS) {
       if (!fingers[id].enabled) continue;
-      const pose = fingerPose(id, fingers[id], mcp[id], vec[id], frame, s);
+      const pose = fingerPose(id, fingers[id], mcp[id], vec[id], frame, s, mode);
       const want = PROPORTIONS[id][0] * FINGER_LEN[id] * s;
       const e = (len(sub(pose.joints[1], pose.joints[0])) - want) / want;
       err += (id === 'thumb' ? 0.6 : 1) * e * e;
@@ -258,7 +269,7 @@ export function buildHandPose(fingers: Record<FingerId, FingerContact>, hand: Ha
     if (err < bestErr - 1e-12) { bestErr = err; bestD = D; }
   }
   const { P, mcp } = basePoints(frame, bestD, s);
-  const poses = FINGERS.map((id) => fingerPose(id, fingers[id], mcp[id], vec[id], frame, s));
+  const poses = FINGERS.map((id) => fingerPose(id, fingers[id], mcp[id], vec[id], frame, s, mode));
   const halfL = (PALM.length * s) / 2;
   const wrist = add(P, scale(frame.u, -halfL * 1.02));
   const thumb = poses[0];

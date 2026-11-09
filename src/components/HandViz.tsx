@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { MarchingCubes } from 'three/examples/jsm/objects/MarchingCubes.js';
 import type { FingerContact, FingerId } from '../grip/types';
 import type { Hand } from '../physics/simulate';
-import { buildHandPose, type FingerPose } from '../grip/handModel';
+import { buildHandPose, type FingerPose, type HandPoseMode } from '../grip/handModel';
 import { buildSkinField } from '../grip/handSkin';
 
 export type HandStyle = 'off' | 'ghost' | 'solid';
@@ -29,8 +29,8 @@ function Nail({ f, mat }: { f: FingerPose; mat: THREE.Material }) {
 }
 
 /** Anatomical hand as one continuous skin surface (display only; see grip/handModel.ts and grip/handSkin.ts). */
-export function HandViz({ fingers, hand, size, style }: { fingers: Record<FingerId, FingerContact>; hand: Hand; size: number; style: HandStyle }) {
-  const pose = useMemo(() => buildHandPose(fingers, hand, size), [fingers, hand, size]);
+export function HandViz({ fingers, hand, size, style, mode = 'hold' }: { fingers: Record<FingerId, FingerContact>; hand: Hand; size: number; style: HandStyle; mode?: HandPoseMode }) {
+  const pose = useMemo(() => buildHandPose(fingers, hand, size, mode), [fingers, hand, size, mode]);
   const solid = style === 'solid';
   const { skin, nail } = useMemo(() => {
     const ghost = { transparent: !solid, opacity: solid ? 1 : 0.45, depthWrite: solid };

@@ -143,6 +143,7 @@ function GripScene({ preset, nonce }: { preset: ViewPreset; nonce: number }) {
   const tool = useStore((s) => s.gripTool);
   const handStyle = useStore((s) => s.handStyle);
   const handSize = useStore((s) => s.handSize);
+  const gripPose = useStore((s) => s.gripPose);
   const selected = useStore((s) => s.selectedFinger);
   const { spec } = useDerived();
   const [dragging, setDragging] = useState(false);
@@ -163,7 +164,7 @@ function GripScene({ preset, nonce }: { preset: ViewPreset; nonce: number }) {
       {FINGERS.map((id) => (
         <FingerMarker key={id} id={id} f={grip.fingers[id]} hand={hand} selected={selected === id} onDragState={setDragging} />
       ))}
-      <HandViz fingers={grip.fingers} hand={hand} size={handSize} style={handStyle} />
+      <HandViz fingers={grip.fingers} hand={hand} size={handSize} style={handStyle} mode={gripPose} />
       {axis && (
         <>
           <Arrow dir={axis as [number, number, number]} length={1.75} color="#ffd34d" radius={0.025} />
@@ -181,6 +182,7 @@ export function GripEditor() {
   const hand = useStore((s) => s.hand);
   const tool = useStore((s) => s.gripTool);
   const handStyle = useStore((s) => s.handStyle);
+  const gripPose = useStore((s) => s.gripPose);
   const set = useStore((s) => s.set);
   const setHand = useStore((s) => s.setHand);
   const selected = useStore((s) => s.selectedFinger);
@@ -220,6 +222,13 @@ export function GripEditor() {
             <button key={k} role="radio" aria-checked={handStyle === k} className={handStyle === k ? 'on' : ''} onClick={() => set({ handStyle: k })}>{l}</button>
           ))}
         </div>
+        {handStyle !== 'off' && (
+          <div className="seg" role="radiogroup" aria-label="Hand pose">
+            {([['hold', 'Holding'], ['release', 'At release']] as const).map(([k, l]) => (
+              <button key={k} role="radio" aria-checked={gripPose === k} className={gripPose === k ? 'on' : ''} onClick={() => set({ gripPose: k })}>{l}</button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="ge-hint">
         {tool === 'orbit' && <>Drag a <b>finger marker</b> to move it · drag empty space to orbit the <b>camera</b> (does not change the grip)</>}

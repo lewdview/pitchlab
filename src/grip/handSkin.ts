@@ -115,7 +115,7 @@ export function buildSkinField(pose: HandPose, size: number, out?: Float32Array,
   const P = pose.palmCenter;
 
   const palmParts: Prim[] = [
-    painted(ellipsoid(add(P, scale(u, 0.05 * halfL)), w, u, n, [halfW * 0.96, halfL * 1.02, halfT * 0.9]), SKIN.palm),
+    painted(ellipsoid(add(P, scale(u, 0.05 * halfL)), w, u, n, [halfW * 0.94, halfL * 1.0, halfT * 0.82]), SKIN.palm),
     painted(ellipsoid(add(add(add(P, scale(w, halfW * 0.5)), scale(u, -halfL * 0.42)), scale(n, halfT * 0.25)), w, u, n, [halfW * 0.46, halfL * 0.56, halfT * 1.05]), SKIN.palm),
     painted(ellipsoid(pose.thenar.center, w, u, n, [pose.thenar.radius, pose.thenar.radius * 1.4, pose.thenar.radius * 0.85]), SKIN.palm),
   ];
@@ -124,7 +124,7 @@ export function buildSkinField(pose: HandPose, size: number, out?: Float32Array,
     palmParts.push(painted(roundCone(mcp[i].joints[0], mcp[i + 1].joints[0], mcp[i].radius * 1.08, mcp[i + 1].radius * 1.08), SKIN.base));
   }
   // knuckle heads on the back of the hand
-  for (const f of mcp) palmParts.push(painted(ellipsoid(add(f.joints[0], scale(n, -f.radius * 0.35)), w, u, n, [f.radius * 0.9, f.radius * 0.95, f.radius * 0.7]), SKIN.knuckle));
+  for (const f of mcp) palmParts.push(painted(ellipsoid(add(f.joints[0], scale(n, -f.radius * 0.3)), w, u, n, [f.radius * 0.75, f.radius * 0.8, f.radius * 0.55]), SKIN.knuckle));
   const forearmCut = add(pose.wrist, scale(sub(pose.forearmEnd, pose.wrist), 0.32));
   palmParts.push(painted(roundCone(add(pose.wrist, scale(u, 0.35 * s)), forearmCut, 0.62 * s, 0.7 * s), SKIN.base));
 
@@ -149,7 +149,7 @@ export function buildSkinField(pose: HandPose, size: number, out?: Float32Array,
     for (const j of [1, 2]) {
       const along = scale(add(segs[j - 1], segs[j]), 0.5);
       const aN = scale(along, 1 / (Math.hypot(...along) || 1));
-      parts.push(painted(ellipsoid(J[j], latN, aN, dorsals[j], [rad[j] * 1.04, rad[j] * 1.0, rad[j] * 0.88]), SKIN.knuckle));
+      parts.push(painted(ellipsoid(J[j], latN, aN, dorsals[j], [rad[j] * 1.0, rad[j] * 0.95, rad[j] * 0.86]), SKIN.knuckle));
     }
     const tipAlong = scale(segs[2], 1 / (Math.hypot(...segs[2]) || 1));
     parts.push(painted(ellipsoid(sub(J[3], scale(tipAlong, rad[3] * 0.25)), latN, tipAlong, dorsals[2], [rad[3] * 1.02, rad[3] * 1.3, rad[3] * 0.86]), SKIN.pad));

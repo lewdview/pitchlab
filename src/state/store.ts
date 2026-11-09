@@ -100,6 +100,8 @@ export interface AppState {
   gripTool: GripTool;
   handStyle: 'off' | 'ghost' | 'solid';
   handSize: number;
+  /** Grip editor: draw the set grip (ball held firmly in the fingers) or the instant of release. */
+  gripPose: 'hold' | 'release';
   selectedFinger: FingerId;
   mobileTab: 'grip' | 'flight' | 'compare';
   aimTarget: { x: number; y: number };
@@ -176,6 +178,7 @@ export const useStore = create<AppState>((set, get) => ({
   gripTool: 'orbit',
   handStyle: 'ghost',
   handSize: 1,
+  gripPose: 'hold',
   selectedFinger: 'index',
   mobileTab: 'grip',
   aimTarget: DEFAULT_TARGET,

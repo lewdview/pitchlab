@@ -7,11 +7,13 @@ import { len, sub } from '../physics/vec';
 describe('hand visualisation pose', () => {
   for (const p of PRESETS) {
     it(`${p.name}: fingertips reach their contacts and nothing passes through the ball`, () => {
-      for (const hand of ['R', 'L'] as const) {
-        const pose = buildHandPose(p.fingers, hand, 1);
+      for (const [hand, mode] of [['R', 'hold'], ['L', 'hold'], ['R', 'release'], ['L', 'release']] as const) {
+        const pose = buildHandPose(p.fingers, hand, 1, mode);
         for (const f of pose.fingers) {
           // every joint after the knuckle stays outside the ball (allowing finger thickness)
-          for (const j of f.joints.slice(1)) expect(len(j)).toBeGreaterThanOrEqual(1 + f.radius * 0.97 - 1e-9);
+          // holding presses the finger pads slightly into the leather (skin compresses); never deeper than that
+          const minR = mode === 'hold' ? 0.9 : 0.97;
+          for (const j of f.joints.slice(1)) expect(len(j)).toBeGreaterThanOrEqual(1 + f.radius * minR - 1e-9);
           if (!f.enabled) continue;
           const c = toWorld(p.fingers[f.id], hand);
           const contact = p.fingers[f.id].contact;
@@ -59,5 +61,22 @@ describe('continuous hand skin', () => {
       }
       expect(skinDistanceAt(sf, [0, 0, 0])).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('holding vs release pose', () => {
+  it('when holding, the middle and end finger segments press the leather; at release they lift away', () => {
+    const p = PRESETS.find((x) => x.id === 'four-seam')!;
+    const hold = buildHandPose(p.fingers, 'R', 1, 'hold');
+    const rel = buildHandPose(p.fingers, 'R', 1, 'release');
+    for (const id of ['index', 'middle'] as const) {
+      const h = hold.fingers.find((f) => f.id === id)!, r = rel.fingers.find((f) => f.id === id)!;
+      // PIP and DIP within ~5% of a finger radius of touching (|p| = 1 + r) when holding
+      for (const j of [1, 2]) expect(Math.abs(len(h.joints[j]) - (1 + h.radius))).toBeLessThan(0.06);
+      // at release the PIP is well off the ball
+      expect(len(r.joints[1]) - (1 + r.radius)).toBeGreaterThan(0.2);
+    }
+    // the ball sits closer to the palm when it is held
+    expect(len(hold.palmCenter)).toBeLessThan(len(rel.palmCenter));
   });
 });

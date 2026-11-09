@@ -84,7 +84,7 @@ export function PitcherFigure({ traj, showGripBall, compact = false }: { traj: T
   const showGuides = useStore((s) => s.view.showGuides);
   const release = traj.init.p;
 
-  const handPose = useMemo(() => buildHandPose(fingers, hand, handSize), [fingers, hand, handSize]);
+  const handPose = useMemo(() => buildHandPose(fingers, hand, handSize, 'release'), [fingers, hand, handSize]);
   const wrist = useMemo(() => add(release, scale(handPose.wrist, BALL_RADIUS)), [release, handPose]);
   const pose = useMemo(() => poseBody(body, hand, release, wrist, slot), [body, hand, release, wrist, slot]);
 
@@ -136,7 +136,7 @@ export function PitcherFigure({ traj, showGripBall, compact = false }: { traj: T
       </group>
       {/* the grip hand holding the ball at the release point, in the release orientation */}
       <group position={release} scale={BALL_RADIUS}>
-        <HandViz fingers={fingers} hand={hand} size={handSize} style="solid" />
+        <HandViz fingers={fingers} hand={hand} size={handSize} style="solid" mode="release" />
         {showGripBall && (
           <group quaternion={new THREE.Quaternion(q0[1], q0[2], q0[3], q0[0])}><Baseball radius={1} detail={0.6} /></group>
         )}
